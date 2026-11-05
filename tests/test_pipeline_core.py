@@ -307,7 +307,7 @@ def test_cli_end_to_end(tmp_path):
     out = subprocess.run(cli + ["status", str(tmp_path / "runs" / "toy")], capture_output=True, text=True)
     assert out.returncode == 0 and "failed" in out.stdout and "cached" not in out.stdout
     out = subprocess.run(cli + ["report", str(tmp_path / "runs" / "toy")], capture_output=True, text=True)
-    assert out.returncode == 4
+    assert out.returncode == 1 and "needs 'layers'" in out.stderr  # the report needs the finished layer summary
     for sub in ("validate", "run", "status", "report"):
         out = subprocess.run(cli + [sub, "--help"], capture_output=True, text=True)
         assert out.returncode == 0 and "usage:" in out.stdout

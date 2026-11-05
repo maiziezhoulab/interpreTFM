@@ -11,12 +11,14 @@ runs/<name>/
     manifest.json
     log.txt
     dataset_qc.json      the stage's outputs
+    cells.csv            cell, n_transcripts, n_genes, qc_pass, label, x_um, y_um
+    vocab_coverage.csv   when a vocabulary was found
     coords_um.csv        spatial data only: cell_index, x_um, y_um
   02_extract/<layer>/shard_*/   the activation store (unchanged 0.9 format), store.json
   03_tis/ 04_sae/ 05_concepts/ 06_concept_eval/ 07_gene_readout/ 08_cells/ 09_layers/ 10_spatial/ 11_report/
 ```
 
-Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The contents of `03_tis` to `07_gene_readout` are listed on the stage pages ([tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md)); the remaining stage directories follow the layout in the [roadmap](../roadmap.md) and are filled in as the stages are implemented.
+Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The contents of each stage directory are listed on the stage pages ([ingest](stage_ingest.md), [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md), [cells](stage_cells.md), [layers](stage_layers.md), [report](stage_report.md)); `10_spatial` follows the layout in the [roadmap](../roadmap.md) and is filled in when the stage is implemented.
 
 ## Stage manifest
 
@@ -29,7 +31,7 @@ Stage directories are created when the stage first runs; `interpretfm status` li
   "config_hash": "3f0c2c1a9b7e4d21",
   "package_version": "1.0.0.dev0",
   "inputs": {},
-  "outputs": {"dataset_qc.json": "01_ingest/dataset_qc.json"},
+  "outputs": {"dataset_qc.json": "01_ingest/dataset_qc.json", "cells.csv": "01_ingest/cells.csv"},
   "environment": {"python": "3.11.9", "executable": "...", "platform": "...", "hostname": "...",
                   "versions": {"interpretfm": "1.0.0.dev0", "numpy": "...", "torch": "...", "anndata": "..."}},
   "model_env": null,
@@ -37,7 +39,7 @@ Stage directories are created when the stage first runs; `interpretfm status` li
   "ended": "2026-11-05T19:58:38+00:00",
   "duration_s": 0.4,
   "error": null,
-  "extra": {"n_cells": 300, "n_genes": 50, "spatial": true}
+  "extra": {"n_cells": 300, "n_genes": 50, "n_flagged": 0, "vocab_coverage": 0.9, "spatial": true}
 }
 ```
 

@@ -25,6 +25,7 @@ model:
   cell_pooling: {kind: token, token: "60695"}
   special_tokens: ["60694", "60695"]
   representative_layer: layer_1.norm2
+  # vocab: /path/to/vocab.json   # the model's gene vocabulary, for coverage at ingest
 
 stages:
   extract: {batch_size: 16, rows_per_shard: 1024}   # add store_root: <path> to use an existing activation store
@@ -35,6 +36,7 @@ stages:
   concepts: {}                    # online g:Profiler; or offline_matrix: <gene x concept CSV>
   concept_eval: {top_m: 20, batch_size: 1024}
   gene_readout: {n_splits: 2}
+  cells: {retain: {min_features: 3}, specificity: {mhr_k: 10, n_assoc: 10, n_null: 5}}   # the toy panel has 50 genes
 
 output:
   html: true

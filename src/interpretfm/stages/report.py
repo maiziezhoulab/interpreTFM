@@ -21,6 +21,8 @@ OUTPUTS = ["report.json"]
 def run_report(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """HTML and JSON report with every metric next to its baseline."""
     cfg = ctx.config
+    for name in ("ingest", "layers"):  # a clear StageError when the run is incomplete (also for `interpretfm report`)
+        ctx.input_dir(name)
     report = write_report(cfg, ctx.run_dir, ctx.stage_dir, html_page=cfg.output.html)
     ctx.log.info("report: %s%s", ctx.stage_dir / "report.json", f" and {ctx.stage_dir / 'report.html'}" if cfg.output.html else "")
     ctx.log.info("report: spatial: %s", report["spatial"]["note"])

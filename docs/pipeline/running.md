@@ -1,7 +1,7 @@
 # Running a pipeline
 
 :::{note}
-In development. The command, the configuration, the runner, the `ingest` stage and the model-level stages `tis`, `sae`, `concepts`, `concept_eval` and `gene_readout` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and `cells`, `layers`, `spatial` and `report` are stubs that stop with a clear message. `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
+In development. The command, the configuration, the runner and the stages `ingest`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers` and `report` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and `spatial` is a stub that stops with a clear message (run everything else with `--stages ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,report`, or `interpretfm report` after the other stages; the report then says `spatial: not run`). `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
 :::
 
 ## The command
@@ -13,27 +13,29 @@ interpretfm run config.yaml                      # all stages, cached and resuma
 interpretfm run config.yaml --stages ingest,extract,tis
 interpretfm run config.yaml --stages tis --force # re-run even when cached
 interpretfm status runs/cosmx_scgpt              # one line per stage from the manifests
-interpretfm report runs/cosmx_scgpt              # (re)build the report (stub)
+interpretfm report runs/cosmx_scgpt              # (re)build report.json and report.html from the finished stages
 interpretfm version
 ```
 
 `python -m interpretfm.cli ...` is equivalent when the console script is not on your `PATH`.
 
-Exit codes: 0 success; 1 a stage failed (its `manifest.json` holds the error); 2 invalid configuration; 3 valid configuration but missing files; 4 not implemented.
+Exit codes: 0 success; 1 a stage failed (its `manifest.json` holds the error); 2 invalid configuration or not a run directory; 3 valid configuration but missing files.
 
 ## Stages
 
 | # | Stage | Inputs | Runs in | Declared output |
 |---|---|---|---|---|
-| 1 | `ingest` | – | core | `dataset_qc.json` (+ `coords_um.csv` for spatial data) |
+| 1 | `ingest` | – | core | `dataset_qc.json`, `cells.csv` (+ `vocab_coverage.csv`, `coords_um.csv`) |
 | 2 | `extract` | ingest | **model environment** | `store.json` + the activation store |
-| 3 | `tis` | extract | core | `tis.json` |
+| 3 | `tis` | extract | core | `tis.json`, `layers.csv` |
 | 4 | `sae` | extract | core | `selected.json` |
-| 5 | `concepts` | sae | core | `concept_f1.json` |
-| 6 | `cells` | concepts | core | `specificity.json` |
-| 7 | `layers` | cells | core | `layer_table.csv` |
-| 8 | `spatial` | cells | core | `niches/selected.json`; skipped without coordinates |
-| 9 | `report` | layers | core | `metrics.json` (+ `report.html`) |
+| 5 | `concepts` | ingest | core | `universe.json`, `genes.csv` |
+| 6 | `concept_eval` | extract, sae, concepts | core | `concept_f1.json`, `concept_f1.csv` |
+| 7 | `gene_readout` | extract, sae, concepts | core | `gene_readout.json`, `gene_readout.csv`, `per_concept.csv.gz` |
+| 8 | `cells` | ingest, extract, sae, concepts, concept_eval | core | `selection.json`, `specificity.json` |
+| 9 | `layers` | tis, sae, concept_eval, gene_readout, cells | core | `layer_table.csv`, `recommendations.json` |
+| 10 | `spatial` | cells | core | `niches/selected.json`; skipped without coordinates; **stub** |
+| 11 | `report` | ingest, layers | core | `report.json` (+ `report.html`) |
 
 Stages run in this order. With `--stages`, every selected stage still needs its inputs to have completed in the run directory (in this invocation or an earlier one); otherwise the run stops with a message naming the missing stage.
 
@@ -55,6 +57,13 @@ interpretfm validate example/toy.yaml
 interpretfm run example/toy.yaml --dry-run
 interpretfm run example/toy.yaml --stages ingest
 interpretfm status example/runs/toy
+```
+
+With `write_toy_run("example", store=True)` (a synthetic activation store and concept table) the whole pipeline except `spatial` runs on a CPU in well under a minute:
+
+```bash
+interpretfm run example/toy.yaml --stages ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,report
+xdg-open example/runs/toy/11_report/report.html
 ```
 
 `configs/toy.yaml` is the same configuration, for a dataset written to `data/toy.h5ad` at the repository root.

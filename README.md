@@ -54,7 +54,7 @@ Model weights, datasets and activation stores are not distributed with the code;
 
 ## Quick start
 
-**v1 pipeline (in development).** Version 1.0 runs every stage from one YAML configuration through the `interpretfm` command. The command, the configuration schema, the cached stage runner and the input stage are in place; the scientific stages are being moved behind it and stop with a clear message until then. Try it on a toy dataset:
+**v1 pipeline (in development).** Version 1.0 runs every stage from one YAML configuration through the `interpretfm` command. The command, the configuration schema, the cached stage runner and every stage except the spatial one are in place (input checks, TIS, SAE training and selection, concept universe, held-out concept F1, gene-level readout, feature retention and projection, population specificity, the per-criterion layer table and a self-contained HTML report); extraction from a model runs from a cached activation store for now. Try it on a toy dataset:
 
 ```bash
 python -c "from interpretfm.testing import write_toy_run; write_toy_run('example')"
@@ -62,6 +62,8 @@ interpretfm validate example/toy.yaml
 interpretfm run example/toy.yaml --dry-run
 interpretfm run example/toy.yaml --stages ingest
 interpretfm status example/runs/toy
+# with write_toy_run('example', store=True): every stage but spatial, then the report
+interpretfm run example/toy.yaml --stages ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,report
 ```
 
 See the [configuration reference](https://interpretfm.readthedocs.io/en/latest/pipeline/configuration.html) and [running a pipeline](https://interpretfm.readthedocs.io/en/latest/pipeline/running.html).

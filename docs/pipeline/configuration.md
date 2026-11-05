@@ -1,7 +1,7 @@
 # Configuration reference
 
 :::{note}
-The v1 pipeline is in development. The configuration schema below is implemented and validated; most stages are stubs until v1.0 (see [running a pipeline](running.md)).
+The v1 pipeline is in development. The configuration schema below is implemented and validated; every stage but `spatial` is implemented (see [running a pipeline](running.md)).
 :::
 
 A run is described by one YAML file with five sections. Relative paths are resolved against the directory of the file. `interpretfm validate config.yaml` checks the schema and reports every problem at once, then checks that the referenced files exist.
@@ -28,6 +28,7 @@ model:
   cell_pooling: {kind: token, token: "60695"}   # kind: token | mean
   special_tokens: ["60694", "60695"]
   representative_layer: layer_1.norm2          # optional; must be one of layers
+  vocab: /path/to/weights/vocab.json           # optional; the model's gene vocabulary, for coverage at ingest
 
 stages:                           # parameters per stage; any stage may be omitted
   extract: {batch_size: 64, rows_per_shard: 8192, dtype: float16}   # or store_root: <cached store>
@@ -36,8 +37,8 @@ stages:                           # parameters per stage; any stage may be omitt
   concepts: {sources: [GO:BP, GO:MF, GO:CC, REAC, KEGG], fdr: 0.05, min_overlap: 2}
   concept_eval: {thresholds: [0, 0.15, 0.3, 0.6], units: [row, gene], representations: [sae, raw, untrained]}
   gene_readout: {n_splits: 5, C: 1.0, scaling: [standardize, center]}
-  cells: {}
-  layers: {}
+  cells: {retain: {tau: 0.15, min_valid_f1: 0.40, min_features: 10}, specificity: {min_pop: 30, mhr_k: 100, n_cells: 40000}}
+  layers: {readout_scaling: standardize}
   spatial: {}
   report: {}
 
@@ -53,18 +54,18 @@ output:
 : `name` (string, required), `out_dir` (path, required), `seed` (integer ≥ 0, default 0).
 
 `dataset`
-: `h5ad` (required). `gene_id.kind` is `symbol` or `ensembl`. `labels` is optional; without it the label-dependent analyses are skipped. `spatial` is optional: when it is present, `um_per_unit` is **required** and must be positive. It is the number of micrometres in one unit of the coordinates stored in `adata.obsm[<obsm>]` (for example `0.18` for CosMx pixels, `1.0` when the coordinates are already in µm). Every length in the pipeline is expressed in µm; the conversion happens once, in `interpretfm.units`, and all radii in stage parameters are given in µm.
+: `h5ad` (required). `gene_id.kind` is `symbol` or `ensembl`. `labels` is optional; without it the label-dependent analyses are skipped. `qc` flags cells with fewer than `min_transcripts` (default 20) transcripts or `min_genes` (default 10) detected genes; flagged cells are kept and reported ([ingest](stage_ingest.md)). `spatial` is optional: when it is present, `um_per_unit` is **required** and must be positive. It is the number of micrometres in one unit of the coordinates stored in `adata.obsm[<obsm>]` (for example `0.18` for CosMx pixels, `1.0` when the coordinates are already in µm). Every length in the pipeline is expressed in µm; the conversion happens once, in `interpretfm.units`, and all radii in stage parameters are given in µm.
 
 `model`
-: `layers` (non-empty list of layer names as used by the activation store). `env` selects the environment in which the model's code runs: `{conda: <name>}`, `{prefix: <env directory>}`, `{python: <interpreter>}`, or `{}` for the current interpreter. Exactly one key may be set. `{container: <image>}` is reserved for the container release and is rejected for now. One model per configuration: write one file per model and share the `dataset` section between them.
+: `layers` (non-empty list of layer names as used by the activation store). `env` selects the environment in which the model's code runs: `{conda: <name>}`, `{prefix: <env directory>}`, `{python: <interpreter>}`, or `{}` for the current interpreter. Exactly one key may be set. `{container: <image>}` is reserved for the container release and is rejected for now. One model per configuration: write one file per model and share the `dataset` section between them. `vocab` (optional) is the model's gene vocabulary (JSON object or list) used by `ingest` to report how many panel genes the model knows; without it, `<checkpoint>/vocab.json` and the stages' `token_vocab` keys are tried.
 
 `stages`
-: A mapping per stage name (`extract`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers`, `spatial`, `report`); `ingest` takes its options from `dataset`. Unknown stage names are errors; the keys inside a stage section are defined by that stage and are not checked by the schema. The keys of the model-level stages are listed on their pages: [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md). Paths inside a stage section (`store_root`, `offline_matrix`, `checkpoints`, `token_vocab`) are taken as absolute or relative to the configuration file; a stage that runs in the model environment reads the resolved copy in the run directory, so prefer absolute paths there.
+: A mapping per stage name (`extract`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers`, `spatial`, `report`); `ingest` takes its options from `dataset`. Unknown stage names are errors; the keys inside a stage section are defined by that stage and are not checked by the schema. The keys of each stage are listed on its page: [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md), [cells](stage_cells.md), [layers](stage_layers.md); `ingest` ([page](stage_ingest.md)) takes its options from `dataset` and `model.vocab`. Paths inside a stage section (`store_root`, `offline_matrix`, `checkpoints`, `token_vocab`) are taken as absolute or relative to the configuration file; a stage that runs in the model environment reads the resolved copy in the run directory, so prefer absolute paths there.
 
   Every stage that reads activations accepts `store_root`, an existing activation store (the sharded 0.9 format); `stages.extract.store_root` registers such a store for the whole run without running a model.
 
 `output`
-: `html`, `json`, `keep_store` (booleans).
+: `html` (write `report.html`; `report.json` is always written), `json`, `keep_store` (booleans).
 
 ## Caching and the stage hash
 
