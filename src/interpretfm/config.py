@@ -12,7 +12,8 @@ it works on Python 3.8–3.11 with PyYAML only). Sections:
     ``um_per_unit``; omitted = scRNA-seq mode, spatial stages are skipped), ``qc``.
 ``model``
     ``name``, ``checkpoint``, ``env`` (where extraction runs; see :mod:`interpretfm.envs`),
-    ``layers``, ``cell_pooling``, ``special_tokens``, ``representative_layer``.
+    ``layers``, ``cell_pooling``, ``special_tokens``, ``representative_layer``, ``vocab``
+    (optional JSON gene vocabulary, used by ``ingest`` to report gene coverage).
 ``stages``
     One mapping per stage name (``extract``, ``tis``, ``sae``, ``concepts``, ``cells``,
     ``layers``, ``spatial``, ``report``) holding that stage's parameters. The runner hashes the
@@ -186,8 +187,10 @@ class Spatial:
 
 @dataclass
 class QC:
-    min_transcripts: int = 0
-    min_genes: int = 0
+    """Cell quality flags: cells below either threshold are flagged at ingest, never dropped."""
+
+    min_transcripts: int = 20
+    min_genes: int = 10
 
 
 @dataclass
@@ -244,8 +247,8 @@ class DatasetSection:
         q = _require_mapping(raw.get("qc"), where + ".qc", errors)
         _unknown_keys(q, {"min_transcripts", "min_genes"}, where + ".qc", errors)
         qc = QC(
-            min_transcripts=int(_get_number(q, "min_transcripts", where + ".qc", errors, default=0, integer=True) or 0),
-            min_genes=int(_get_number(q, "min_genes", where + ".qc", errors, default=0, integer=True) or 0),
+            min_transcripts=int(_get_number(q, "min_transcripts", where + ".qc", errors, default=20, integer=True) or 0),
+            min_genes=int(_get_number(q, "min_genes", where + ".qc", errors, default=10, integer=True) or 0),
         )
         return cls(h5ad=_resolve(base, h5ad), counts_layer=counts_layer, gene_id=gene_id, labels=labels,
                    spatial=spatial, qc=qc)
@@ -302,12 +305,13 @@ class ModelSection:
     cell_pooling: CellPooling = field(default_factory=CellPooling)
     special_tokens: List[str] = field(default_factory=list)
     representative_layer: Optional[str] = None
+    vocab: Optional[Path] = None  #: JSON gene vocabulary of the model (``{name: id}``), for coverage at ingest
 
     @classmethod
     def parse(cls, raw: Dict[str, Any], base: Path, errors: List[str]) -> "ModelSection":
         where = "model"
         _unknown_keys(raw, {"name", "checkpoint", "env", "layers", "cell_pooling", "special_tokens",
-                            "representative_layer"}, where, errors)
+                            "representative_layer", "vocab"}, where, errors)
         name = _get_str(raw, "name", where, errors, required=True, default="") or ""
         checkpoint = _get_str(raw, "checkpoint", where, errors)
         env = ModelEnv.parse(raw.get("env"), base, errors)
@@ -324,8 +328,10 @@ class ModelSection:
         rep = _get_str(raw, "representative_layer", where, errors)
         if rep is not None and layers and rep not in layers:
             errors.append(f"{where}.representative_layer: {rep!r} is not in model.layers")
+        vocab = _get_str(raw, "vocab", where, errors)
         return cls(name=name, checkpoint=_resolve(base, checkpoint) if checkpoint else None, env=env, layers=layers,
-                   cell_pooling=pooling, special_tokens=special, representative_layer=rep)
+                   cell_pooling=pooling, special_tokens=special, representative_layer=rep,
+                   vocab=_resolve(base, vocab) if vocab else None)
 
 
 @dataclass
@@ -474,4 +480,6 @@ def check_files(cfg: Config) -> List[str]:
         problems.append(f"dataset.labels.groups: file not found: {cfg.dataset.labels.groups}")
     if cfg.model.checkpoint is not None and not cfg.model.checkpoint.exists():
         problems.append(f"model.checkpoint: path not found: {cfg.model.checkpoint}")
+    if cfg.model.vocab is not None and not cfg.model.vocab.is_file():
+        problems.append(f"model.vocab: file not found: {cfg.model.vocab}")
     return problems
