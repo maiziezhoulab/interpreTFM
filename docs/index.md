@@ -44,6 +44,11 @@ best_practices
 pipeline/configuration
 pipeline/running
 pipeline/run_directory
+pipeline/stage_tis
+pipeline/stage_sae
+pipeline/stage_concepts
+pipeline/stage_concept_eval
+pipeline/stage_gene_readout
 ```
 
 ```{toctree}

@@ -16,7 +16,7 @@ runs/<name>/
   03_tis/ 04_sae/ 05_concepts/ 06_concept_eval/ 07_gene_readout/ 08_cells/ 09_layers/ 10_spatial/ 11_report/
 ```
 
-Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The planned contents of the stage directories follow the layout in the [roadmap](../roadmap.md) and are filled in as the stages are implemented.
+Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The contents of `03_tis` to `07_gene_readout` are listed on the stage pages ([tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md)); the remaining stage directories follow the layout in the [roadmap](../roadmap.md) and are filled in as the stages are implemented.
 
 ## Stage manifest
 

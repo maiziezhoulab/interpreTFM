@@ -1,7 +1,7 @@
 # Running a pipeline
 
 :::{note}
-In development. The command, the configuration, the runner and the `ingest` stage work; `extract`, `tis`, `sae`, `concepts`, `cells`, `layers`, `spatial` and `report` are stubs that stop with a clear message. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
+In development. The command, the configuration, the runner, the `ingest` stage and the model-level stages `tis`, `sae`, `concepts`, `concept_eval` and `gene_readout` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and `cells`, `layers`, `spatial` and `report` are stubs that stop with a clear message. `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
 :::
 
 ## The command

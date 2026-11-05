@@ -1,6 +1,8 @@
 # Toy configuration for the v1 pipeline (in development). Paths are relative to this file.
 # Generate the dataset first, from Python:
 #   from interpretfm.testing import make_toy_adata; make_toy_adata().write_h5ad("data/toy.h5ad")
+# (`interpretfm.testing.write_toy_run(root, store=True)` writes dataset, a synthetic activation store,
+# an offline concept table and a ready-to-run configuration in one go.)
 # then: interpretfm validate configs/toy.yaml ; interpretfm run configs/toy.yaml --dry-run
 run:
   name: toy
@@ -25,8 +27,14 @@ model:
   representative_layer: layer_1.norm2
 
 stages:
-  extract: {batch_size: 16, rows_per_shard: 1024}
-  tis: {trials: 50}
+  extract: {batch_size: 16, rows_per_shard: 1024}   # add store_root: <path> to use an existing activation store
+  tis: {trials: 40, k_ref: 8}
+  sae: {width_multiplier: 2, lambda: {grid: [1.0, 3.0], rule: {l0_max: 0.3, dead_max: 0.25}}, steps: 300,
+        lr: 1.0e-2, warmup: 5, resample_every: 100, batch_size: 64, device: cpu,
+        qc: {max_shards: 4, rows_per_shard: 256}}
+  concepts: {}                    # online g:Profiler; or offline_matrix: <gene x concept CSV>
+  concept_eval: {top_m: 20, batch_size: 1024}
+  gene_readout: {n_splits: 2}
 
 output:
   html: true
