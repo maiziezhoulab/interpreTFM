@@ -147,3 +147,19 @@ class TokenResolver:
     def resolve_rows(self, tokens: Sequence[Any], key_to_row: Dict[str, int]) -> np.ndarray:
         """Row index of each token's gene in a table keyed by gene (-1 when unresolved)."""
         return np.array([key_to_row.get(k, -1) if k is not None else -1 for k in self.resolve(tokens)], dtype=np.int64)
+
+
+def resolver_for(cfg, params: Dict[str, Any], store_root: Union[str, Path], genes: GeneTable,
+                 stage: str = "concept_eval") -> TokenResolver:
+    """The :class:`TokenResolver` of a run: ``stages.<stage>.token_vocab`` (a JSON vocabulary)
+    when set, else ``<store_root>/token_vocab.json`` when the extraction wrote one, else
+    token ids are taken as gene names. Special tokens come from ``model.special_tokens``."""
+    from interpretfm.params import param_path
+
+    vocab: Optional[Dict[str, str]] = None
+    given = params.get("token_vocab")
+    if given:
+        vocab = load_token_vocab(param_path(cfg, given, stage, "token_vocab"))
+    elif (Path(store_root) / "token_vocab.json").exists():
+        vocab = load_token_vocab(Path(store_root) / "token_vocab.json")
+    return TokenResolver(genes, vocab=vocab, special_tokens=cfg.model.special_tokens)

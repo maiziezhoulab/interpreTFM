@@ -11,7 +11,7 @@ from interpretfm.runner import StageContext, register_stage
 OUTPUTS = ["gene_readout.json"]
 
 
-@register_stage("gene_readout", inputs=["sae", "concepts"], outputs=OUTPUTS)
+@register_stage("gene_readout", inputs=["extract", "sae", "concepts"], outputs=OUTPUTS)
 def run_gene_readout(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Gene-level linear readout of concept membership on unseen genes, with expression and random controls."""
     raise NotImplementedError(
