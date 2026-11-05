@@ -5,7 +5,7 @@
     interpretfm validate config.yaml          check a configuration (schema and referenced files)
     interpretfm run config.yaml [--stages a,b] [--force] [--dry-run]
     interpretfm status run_dir/               stage status from the manifests
-    interpretfm report run_dir/               (re)build the report of a finished run
+    interpretfm report run_dir/               (re)build the report of a run whose stages are done
     interpretfm version
     interpretfm stage <name> --config <resolved.yaml> --run-dir <dir>   (internal: one stage, in-process)
 
@@ -112,9 +112,27 @@ def cmd_status(args) -> int:
 
 
 def cmd_report(args) -> int:
-    print("interpretfm report: not implemented in this development version "
-          "(the report stage runs as part of `interpretfm run`)", file=sys.stderr)
-    return 4
+    """(Re)build the report of a run from its resolved configuration and finished stages."""
+    from interpretfm.runner import RESOLVED_CONFIG, stage_dir
+
+    run_dir = Path(args.run_dir)
+    resolved = run_dir / RESOLVED_CONFIG
+    if not resolved.is_file():
+        print(f"not a run directory (no {RESOLVED_CONFIG}): {run_dir}", file=sys.stderr)
+        return 2
+    try:
+        cfg = load_config(resolved)
+    except ConfigError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    try:
+        m = run_stage_inprocess(cfg, "report", run_dir)
+    except StageError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    out = stage_dir(run_dir, "report")
+    print(f"report {m.status}: {out / 'report.json'}" + (f", {out / 'report.html'}" if cfg.output.html else ""))
+    return 0
 
 
 def cmd_stage(args) -> int:

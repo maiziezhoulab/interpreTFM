@@ -1,20 +1,27 @@
-"""Stage ``report``: HTML and JSON report with every metric next to its baseline.
+"""Stage ``report``: ``report.json`` with every metric next to its baseline and one self-contained
+HTML page (inline CSS, embedded PNG figures, no external resources).
 
-Stub: the signature, inputs and outputs are final; the implementation is pending.
+Reads the outputs of every finished stage in the run directory (:func:`interpretfm.report.collect`);
+``layers`` must be done. The spatial stage is reported as run, skipped or not run.
+``output.html`` switches the HTML page; ``report.json`` is always written.
+
+Outputs: ``report.json`` and, with ``output.html``, ``report.html``.
 """
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from interpretfm.report import write_report
 from interpretfm.runner import StageContext, register_stage
 
-OUTPUTS = ['metrics.json']
+OUTPUTS = ["report.json"]
 
 
-@register_stage("report", inputs=["layers"], outputs=OUTPUTS)
+@register_stage("report", inputs=["ingest", "layers"], outputs=OUTPUTS)
 def run_report(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """HTML and JSON report with every metric next to its baseline."""
-    raise NotImplementedError(
-        "stage 'report' is not implemented in this development version; "
-        "parameters are read from config.stages.report (ctx.params)"
-    )
+    cfg = ctx.config
+    report = write_report(cfg, ctx.run_dir, ctx.stage_dir, html_page=cfg.output.html)
+    ctx.log.info("report: %s%s", ctx.stage_dir / "report.json", f" and {ctx.stage_dir / 'report.html'}" if cfg.output.html else "")
+    ctx.log.info("report: spatial: %s", report["spatial"]["note"])
+    return {"html": cfg.output.html, "n_layers": len(report["layer_table"]), "spatial": report["spatial"]["status"]}
