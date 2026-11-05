@@ -2,8 +2,8 @@
 
 ::
 
-    interpretfm validate config.yaml          check a configuration (schema and referenced files)
-    interpretfm run config.yaml [--stages a,b] [--force] [--dry-run]
+    interpretfm validate config.yaml [--env-file paths.env]   check a configuration (schema and referenced files)
+    interpretfm run config.yaml [--stages a,b] [--force] [--dry-run] [--env-file paths.env]
     interpretfm status run_dir/               stage status from the manifests
     interpretfm report run_dir/               (re)build the report of a run whose stages are done
     interpretfm version
@@ -33,12 +33,14 @@ def _parser() -> argparse.ArgumentParser:
     v = sub.add_parser("validate", help="validate a configuration file")
     v.add_argument("config")
     v.add_argument("--no-files", action="store_true", help="do not check that referenced files exist")
+    v.add_argument("--env-file", help="KEY=VALUE file supplying ${NAME} placeholders of the configuration")
 
     r = sub.add_parser("run", help="run the pipeline (cached and resumable)")
     r.add_argument("config")
     r.add_argument("--stages", help="comma-separated subset in pipeline order, e.g. ingest,extract,tis")
     r.add_argument("--force", action="store_true", help="re-run the selected stages even when cached")
     r.add_argument("--dry-run", action="store_true", help="show what would run and exit")
+    r.add_argument("--env-file", help="KEY=VALUE file supplying ${NAME} placeholders of the configuration")
 
     s = sub.add_parser("status", help="show the status of every stage of a run")
     s.add_argument("run_dir")
@@ -64,7 +66,7 @@ def _print_plan(rows) -> None:
 
 def cmd_validate(args) -> int:
     try:
-        cfg = load_config(args.config)
+        cfg = load_config(args.config, env_file=args.env_file)
     except ConfigError as e:
         print(str(e), file=sys.stderr)
         return 2
@@ -84,7 +86,7 @@ def cmd_validate(args) -> int:
 
 def cmd_run(args) -> int:
     try:
-        cfg = load_config(args.config)
+        cfg = load_config(args.config, env_file=args.env_file)
     except ConfigError as e:
         print(str(e), file=sys.stderr)
         return 2

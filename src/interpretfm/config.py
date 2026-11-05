@@ -24,7 +24,10 @@ it works on Python 3.8–3.11 with PyYAML only). Sections:
     ``html`` and ``json`` report switches and ``keep_store`` (whether the activation store is
     kept after the run).
 
-Relative paths are resolved against the directory of the configuration file.
+Relative paths are resolved against the directory of the configuration file. Strings may
+contain ``${NAME}`` placeholders, replaced from the environment (and from a ``KEY=VALUE``
+file, see :func:`load_env_file`) when the file is loaded; an unset placeholder is an error.
+This is how the shipped paper configurations refer to data without naming a machine.
 
 Example::
 
@@ -48,6 +51,8 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -456,8 +461,78 @@ def parse_config(raw: Dict[str, Any], base: Union[str, Path] = ".", source: Opti
     return Config(run=run, dataset=dataset, model=model, stages=stages, output=output, source=source)
 
 
-def load_config(path: Union[str, Path]) -> Config:
-    """Load and validate a YAML configuration file."""
+_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def load_env_file(path: Union[str, Path]) -> Dict[str, str]:
+    """Read a ``KEY=VALUE`` file (one per line; ``#`` comments and a leading ``export`` are
+    allowed; values may use ``${NAME}`` of earlier keys or of the environment)."""
+    path = Path(path)
+    if not path.is_file():
+        raise ConfigError(f"environment file not found: {path}")
+    out: Dict[str, str] = {}
+    for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("export "):
+            s = s[len("export "):].strip()
+        if "=" not in s:
+            raise ConfigError(f"{path}:{lineno}: expected KEY=VALUE, got {line!r}")
+        key, value = s.split("=", 1)
+        key, value = key.strip(), value.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            raise ConfigError(f"{path}:{lineno}: invalid variable name {key!r}")
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        scope = dict(os.environ)
+        scope.update(out)
+        value, missing = _expand_string(value, scope)
+        if missing:
+            raise ConfigError(f"{path}:{lineno}: {key} refers to unset variable(s) {missing}")
+        out[key] = value
+    return out
+
+
+def _expand_string(s: str, env: Dict[str, str]):
+    missing: List[str] = []
+
+    def sub(m):
+        name = m.group(1)
+        if name in env:
+            return env[name]
+        missing.append(name)
+        return m.group(0)
+
+    return _PLACEHOLDER.sub(sub, s), missing
+
+
+def expand_placeholders(obj: Any, env: Dict[str, str], where: str = "", missing: Optional[Dict[str, List[str]]] = None):
+    """Replace ``${NAME}`` in every string of a nested mapping/list. ``missing`` collects
+    ``{name: [where, ...]}`` for placeholders without a value."""
+    if missing is None:
+        missing = {}
+    if isinstance(obj, str):
+        out, miss = _expand_string(obj, env)
+        for name in miss:
+            missing.setdefault(name, []).append(where or "<root>")
+        return out
+    if isinstance(obj, dict):
+        return {k: expand_placeholders(v, env, f"{where}.{k}" if where else str(k), missing) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [expand_placeholders(v, env, f"{where}[{i}]", missing) for i, v in enumerate(obj)]
+    return obj
+
+
+def load_config(path: Union[str, Path], env_file: Optional[Union[str, Path]] = None,
+                env: Optional[Dict[str, str]] = None) -> Config:
+    """Load and validate a YAML configuration file.
+
+    ``${NAME}`` placeholders in strings are replaced from ``env`` (a mapping, highest
+    priority), then the process environment, then ``env_file`` (a ``KEY=VALUE`` file,
+    lowest priority: it supplies values the environment does not set). A placeholder
+    without a value is a :class:`ConfigError` naming the variable and where it is used.
+    """
     path = Path(path)
     if not path.is_file():
         raise ConfigError(f"configuration file not found: {path}")
@@ -468,6 +543,17 @@ def load_config(path: Union[str, Path]) -> Config:
         raise ConfigError(f"{path}: not valid YAML: {e}") from e
     if raw is None:
         raise ConfigError(f"{path}: the file is empty")
+    scope: Dict[str, str] = {}
+    if env_file is not None:
+        scope.update(load_env_file(env_file))
+    scope.update(os.environ)
+    scope.update(env or {})
+    missing: Dict[str, List[str]] = {}
+    raw = expand_placeholders(raw, scope, missing=missing)
+    if missing:
+        lines = [f"${{{name}}} (used at {', '.join(places)})" for name, places in sorted(missing.items())]
+        raise ConfigError(f"{path}: unset placeholder variable(s):\n  - " + "\n  - ".join(lines)
+                          + "\nSet them in the environment or in a KEY=VALUE file passed with --env-file.")
     return parse_config(raw, base=path.parent, source=path.resolve())
 
 

@@ -8,7 +8,7 @@ For every configured layer the stage builds the cell-level activation matrix fro
 
 - **TIS** of dimension *d*: in each of `trials` trials one query cell is drawn; `k_ref` reference cells are drawn without replacement from the cells at or above the upper quantile of *d* and from those at or below the lower quantile (the query excluded); the query's expression profile (library-size normalized to 10⁴, log1p, L2-normalized) is compared with the two reference centroids by cosine similarity, and the trial is correct when the more similar pool matches the query's side of the median of *d*. TIS is the accuracy over trials.
 - **Shuffled control**: each dimension permuted independently across cells, then the same procedure. The layer's **TIS gain** is the mean TIS over dimensions minus the mean shuffled TIS.
-- **PCA control**: a dimension-matched PCA (`pca_of: expression`, the default, as described in the manuscript's Methods; `pca_of: activations` rotates the activation matrix instead) scored in the same way, reported as a descriptive reference.
+- **PCA control**: the same activations rotated to their principal components (`pca_of: activations`, the default; this dimension-matched change of basis is the control reported in the manuscript) or a PCA of the expression matrix with as many components (`pca_of: expression`), scored in the same way and reported as a descriptive reference.
 
 The computations are those of `interp_pipeline.tis.core` (0.9); the stage adds the store reader, the configuration and the per-layer records.
 
@@ -21,7 +21,7 @@ The computations are those of `interp_pipeline.tis.core` (0.9); the stage adds t
 | `quantiles` | `[0.25, 0.75]` | lower/upper pool quantiles |
 | `judge` | `log1p_cp10k` | expression transform (`raw` uses `X` as is) |
 | `controls` | `[shuffle, pca]` | controls to run |
-| `pca_of` | `expression` | `expression` or `activations` |
+| `pca_of` | `activations` | `activations` (rotate the activations) or `expression` (PCA of the expression matrix) |
 | `seed` | 42 | random generator of the trials and the permutation |
 | `subsample_eval` | null | restrict query cells to a random subset |
 | `max_shards` | null | read only the first *n* shards (smoke runs) |

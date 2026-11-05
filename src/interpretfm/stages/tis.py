@@ -1,8 +1,8 @@
 """Stage ``tis``: Transcriptomic interpretability score per layer, with shuffled and PCA controls.
 
 Parameters (``stages.tis``): ``trials`` (800), ``k_ref`` (32), ``quantiles`` ([0.25, 0.75]),
-``judge`` (``log1p_cp10k``), ``controls`` (``[shuffle, pca]``), ``pca_of`` (``expression`` |
-``activations``), ``seed`` (42), ``subsample_eval``, ``max_shards``, ``keep_cell_matrix`` (true)
+``judge`` (``log1p_cp10k``), ``controls`` (``[shuffle, pca]``), ``pca_of`` (``activations`` |
+``expression``), ``seed`` (42), ``subsample_eval``, ``max_shards``, ``keep_cell_matrix`` (true)
 and ``store_root`` (a cached activation store instead of the ``extract`` output).
 
 Outputs: ``tis.json`` (per-layer summaries and the parameters), ``layers.csv`` (one row per

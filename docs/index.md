@@ -53,6 +53,7 @@ pipeline/stage_gene_readout
 pipeline/stage_cells
 pipeline/stage_layers
 pipeline/stage_report
+reproducing
 ```
 
 ```{toctree}

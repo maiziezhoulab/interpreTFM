@@ -51,3 +51,6 @@ debug_acts/
 
 # Quick-start toy example (README)
 example/
+
+# Local data locations for the paper configurations (copy of configs/paper/paths.env.example)
+configs/paper/paths.env
