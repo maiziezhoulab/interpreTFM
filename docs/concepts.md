@@ -20,7 +20,7 @@ Stored layer identifiers are zero-based (`layer_1.norm2` is display Layer 2).
 TIS asks whether variation along one representation dimension shows up in the measured transcriptome. For a dimension, cells in its upper and lower activation quartiles form a high pool and a low pool. In each trial a query cell is drawn, a fixed number of reference cells is sampled from each pool (excluding the query), and the query is assigned to the pool whose mean expression profile is closer by cosine similarity. Similarity is computed on measured expression (library-size normalized, log-transformed, L2-normalized), not on model activations. TIS is the fraction of trials in which this assignment matches whether the query's own activation is above the dimension's median.
 
 - A high TIS means the dimension's variation is reflected in expression. It does not assign a concept to the dimension.
-- **Controls:** each dimension permuted across cells (the layer-level TIS gain is the mean TIS minus the mean after permutation), and a dimension-matched PCA of the expression data as a descriptive reference.
+- **Controls:** each dimension permuted across cells (the layer-level TIS gain is the mean TIS minus the mean after permutation), and the same activations rotated to their principal components (a dimension-matched change of basis) as a descriptive reference.
 
 **In 0.9:** `interp_pipeline.tis.core` (scores and controls) and `interp_pipeline.tis.io` (reading cell-level rows, building the expression matrix used for similarity). The layer-screen runner `interp_pipeline.tis.single_layer_screen` needs a backend module that is not included (v1.0); its `--backend-script` option has no default.
 

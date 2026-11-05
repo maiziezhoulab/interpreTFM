@@ -11,9 +11,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Documentation pages for the configuration, running a pipeline and the run directory; API page for the pipeline core.
 - Model-level stages of the v1 pipeline: `tis` (TIS with shuffled and PCA controls), `sae` (the biased ReLU SAE trainer with the fixed resampler, QC, the λ rule and the untrained baseline), `concepts` (g:Profiler concept universe with cache, an offline matrix mode and configurable gene keys), `concept_eval` (held-out concept F1 under the row and whole-gene splits for SAE, raw and untrained units, with cell de-duplication) and `gene_readout` (gene-level linear readout with expression and random controls); the stage order gains `concept_eval` and `gene_readout`. Shared helpers `interpretfm.stores` (activation-store reading, cached stores through `store_root`), `interpretfm.genes` (gene keys, token vocabularies) and `interpretfm.params`; `write_toy_run(store=True)` writes a synthetic activation store. One documentation page per stage.
 
+- `${NAME}` placeholders in configuration strings, filled from the environment or a `KEY=VALUE` file (`--env-file`, `load_config(env_file=...)`, `interpretfm.config.load_env_file`).
+
 ### Changed
 
 - Version `1.0.0.dev0`; `pyyaml` is a dependency.
+- The TIS PCA control defaults to `pca_of: activations` (the activations rotated to their principal components, the control the manuscript reports); `pca_of: expression` remains available.
 
 ## [0.9.0] - 2026-11-05
 

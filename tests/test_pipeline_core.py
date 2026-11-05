@@ -91,6 +91,26 @@ def test_resolved_config_round_trips(toy, tmp_path):
     assert again.to_dict() == toy.to_dict()
 
 
+def test_placeholders_expand_from_env_file_and_environment(tmp_path, monkeypatch):
+    """``${NAME}`` in any string is filled from the environment, then an env file; unset names are errors."""
+    yaml_path = write_toy_run(tmp_path)
+    text = yaml_path.read_text().replace("h5ad: ", "h5ad: ${TOY_ROOT}/").replace("out_dir: ", "out_dir: ${TOY_RUNS}/")
+    cfg_path = tmp_path / "placeholders.yaml"
+    cfg_path.write_text(text + "\nstages:\n  tis: {trials: 3, store_root: '${TOY_STORE}'}\n")
+    env_file = tmp_path / "paths.env"
+    env_file.write_text("# comment\nexport TOY_ROOT=.\nTOY_RUNS=${TOY_ROOT}/elsewhere\nTOY_STORE='quoted'\n")
+    with pytest.raises(ConfigError) as e:
+        load_config(cfg_path)
+    assert "${TOY_ROOT}" in str(e.value) and "dataset.h5ad" in str(e.value) and "stages.tis.store_root" in str(e.value)
+    cfg = load_config(cfg_path, env_file=env_file)
+    assert cfg.dataset.h5ad == (tmp_path / "data" / "toy.h5ad").resolve()
+    assert cfg.run.out_dir == (tmp_path / "elsewhere" / "runs" / "toy").resolve()
+    assert cfg.stage_params("tis")["store_root"] == "quoted"
+    monkeypatch.setenv("TOY_RUNS", str(tmp_path / "from_env"))
+    assert load_config(cfg_path, env_file=env_file).run.out_dir == (tmp_path / "from_env" / "runs" / "toy").resolve()
+    assert load_config(cfg_path, env_file=env_file, env={"TOY_RUNS": "x"}).run.out_dir == (tmp_path / "x" / "runs" / "toy").resolve()
+
+
 def test_validate_cli_reports_errors(tmp_path):
     bad = tmp_path / "bad.yaml"
     bad.write_text("run: {name: x}\ndataset: {h5ad: a.h5ad, spatial: {obsm: spatial}}\nmodel: {name: m}\n")

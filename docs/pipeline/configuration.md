@@ -66,6 +66,15 @@ output:
 `output`
 : `html`, `json`, `keep_store` (booleans).
 
+## Placeholders
+
+Any string may contain `${NAME}`. When the file is loaded the placeholder is replaced from (highest priority first) a mapping passed to `load_config(env=...)`, the process environment, and a `KEY=VALUE` file given with `--env-file` (or `load_config(env_file=...)`). A placeholder without a value stops with an error naming the variable and the keys that use it. The paper configurations in `configs/paper/` refer to the dataset, the activation stores, the model vocabularies and the cached intermediates only through such placeholders ([reproducing the manuscript](../reproducing.md)).
+
+```yaml
+dataset: {h5ad: "${INTERPRETFM_DATA}/cosmx_human_lung_sec8.h5ad", ...}
+stages: {extract: {store_root: "${INTERPRETFM_STORES}/acts_extraction_scgpt_cosmx"}}
+```
+
 ## Caching and the stage hash
 
 The runner hashes, for each stage, the stage's own section together with `dataset`, `model` and `run.seed`. A cached stage result is reused only when this hash is unchanged; editing another stage's section, `run.name` or `out_dir` does not invalidate it. The resolved configuration (absolute paths, defaults filled in) is written to `<out_dir>/config.resolved.yaml` at every run.

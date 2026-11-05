@@ -9,8 +9,9 @@ log-transformed, L2-normalized profiles). TIS is the accuracy over trials.
 
 Controls: each dimension permuted independently across cells (``shuffle``; the layer's
 *TIS gain* is the mean TIS minus the mean shuffled TIS) and a dimension-matched PCA
-(``pca``) of the expression matrix (``pca_of: expression``, the default) or of the
-activation matrix itself (``pca_of: activations``). The computations are those of
+(``pca``): the activation matrix rotated to its principal components (``pca_of:
+activations``, the default and what the manuscript reports) or a PCA of the expression
+matrix with as many components (``pca_of: expression``). The computations are those of
 :mod:`interp_pipeline.tis.core`; this module adds the cell-level matrix from the store
 (:func:`interpretfm.stores.cell_matrix`) and the per-layer result record.
 """
@@ -41,7 +42,7 @@ class TISParams:
     quantiles: Sequence[float] = (0.25, 0.75)
     judge: str = "log1p_cp10k"
     controls: Sequence[str] = ("shuffle", "pca")
-    pca_of: str = "expression"
+    pca_of: str = "activations"
     seed: int = 42
     subsample_eval: Optional[int] = None
     max_shards: Optional[int] = None
@@ -117,7 +118,7 @@ def params_from_mapping(params: Dict[str, Any], default_seed: int = 42) -> TISPa
         quantiles=(float(q[0]), float(q[1])),
         judge=get_param(params, "judge", "log1p_cp10k", "tis", str, choices=("log1p_cp10k", "raw")),
         controls=get_list(params, "controls", list(CONTROLS), "tis", choices=CONTROLS),
-        pca_of=get_param(params, "pca_of", "expression", "tis", str, choices=("expression", "activations")),
+        pca_of=get_param(params, "pca_of", "activations", "tis", str, choices=("expression", "activations")),
         seed=get_param(params, "seed", default_seed, "tis", int),
         subsample_eval=get_param(params, "subsample_eval", None, "tis", int),
         max_shards=get_param(params, "max_shards", None, "tis", int),
