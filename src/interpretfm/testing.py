@@ -90,6 +90,7 @@ def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None) -> Dict[st
         "concepts": {},
         "concept_eval": {"top_m": 20, "batch_size": 1024},
         "gene_readout": {"n_splits": 2, "controls": ["random", "coexpression", "coexpression_pc50", "celltype", "trivial"]},
+        "cells": {"retain": {"min_features": 3}, "specificity": {"mhr_k": 10, "n_assoc": 10, "n_null": 5}},
     }
     if concepts_csv is not None:
         params["concepts"]["offline_matrix"] = str(concepts_csv)
