@@ -57,6 +57,7 @@ autodoc_mock_imports = [
     "requests",
     "gprofiler",
     "goatools",
+    "yaml",
 ]
 autodoc_default_options = {"members": True, "undoc-members": True, "show-inheritance": True}
 autodoc_member_order = "bysource"

@@ -1,0 +1,33 @@
+# Toy configuration for the v1 pipeline (in development). Paths are relative to this file.
+# Generate the dataset first, from Python:
+#   from interpretfm.testing import make_toy_adata; make_toy_adata().write_h5ad("data/toy.h5ad")
+# then: interpretfm validate configs/toy.yaml ; interpretfm run configs/toy.yaml --dry-run
+run:
+  name: toy
+  out_dir: ../runs/toy
+  seed: 0
+
+dataset:
+  h5ad: ../data/toy.h5ad
+  counts_layer: null              # X holds raw counts
+  gene_id: {column: index, kind: symbol}
+  labels: {column: cell_type}
+  spatial: {obsm: spatial, um_per_unit: 0.5}   # omit this block for scRNA-seq data
+  qc: {min_transcripts: 10, min_genes: 5}
+
+model:
+  name: scgpt
+  checkpoint: null                # path to the model weights
+  env: {}                         # {conda: interpretfm} | {prefix: /path/env} | {python: /path/bin/python}
+  layers: [layer_1.norm2]
+  cell_pooling: {kind: token, token: "60695"}
+  special_tokens: ["60694", "60695"]
+  representative_layer: layer_1.norm2
+
+stages:
+  extract: {batch_size: 16, rows_per_shard: 1024}
+  tis: {trials: 50}
+
+output:
+  html: true
+  json: true
