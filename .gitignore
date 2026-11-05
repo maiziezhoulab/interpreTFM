@@ -48,3 +48,6 @@ debug_acts/
 .vscode/
 .idea/
 .DS_Store
+
+# Quick-start toy example (README)
+example/

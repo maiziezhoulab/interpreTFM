@@ -1,0 +1,84 @@
+# Running a pipeline
+
+:::{note}
+In development. The command, the configuration, the runner and the `ingest` stage work; `extract`, `tis`, `sae`, `concepts`, `cells`, `layers`, `spatial` and `report` are stubs that stop with a clear message. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
+:::
+
+## The command
+
+```bash
+interpretfm validate config.yaml                 # schema, then referenced files
+interpretfm run config.yaml --dry-run            # what would run, without writing anything
+interpretfm run config.yaml                      # all stages, cached and resumable
+interpretfm run config.yaml --stages ingest,extract,tis
+interpretfm run config.yaml --stages tis --force # re-run even when cached
+interpretfm status runs/cosmx_scgpt              # one line per stage from the manifests
+interpretfm report runs/cosmx_scgpt              # (re)build the report (stub)
+interpretfm version
+```
+
+`python -m interpretfm.cli ...` is equivalent when the console script is not on your `PATH`.
+
+Exit codes: 0 success; 1 a stage failed (its `manifest.json` holds the error); 2 invalid configuration; 3 valid configuration but missing files; 4 not implemented.
+
+## Stages
+
+| # | Stage | Inputs | Runs in | Declared output |
+|---|---|---|---|---|
+| 1 | `ingest` | – | core | `dataset_qc.json` (+ `coords_um.csv` for spatial data) |
+| 2 | `extract` | ingest | **model environment** | `store.json` + the activation store |
+| 3 | `tis` | extract | core | `tis.json` |
+| 4 | `sae` | extract | core | `selected.json` |
+| 5 | `concepts` | sae | core | `concept_f1.json` |
+| 6 | `cells` | concepts | core | `specificity.json` |
+| 7 | `layers` | cells | core | `layer_table.csv` |
+| 8 | `spatial` | cells | core | `niches/selected.json`; skipped without coordinates |
+| 9 | `report` | layers | core | `metrics.json` (+ `report.html`) |
+
+Stages run in this order. With `--stages`, every selected stage still needs its inputs to have completed in the run directory (in this invocation or an earlier one); otherwise the run stops with a message naming the missing stage.
+
+A stage is **skipped as cached** when its directory holds a `manifest.json` with status `done`, the same configuration hash and all declared outputs present. It is **skipped as not applicable** (status `skipped`) when its predicate is false for the configuration, for example `spatial` without `dataset.spatial`. A failing stage writes a `failed` manifest with the traceback and stops the run; fix the cause and run again, and the finished stages are reused.
+
+## The model environment
+
+`extract` imports the model's code, which needs that model's software stack. The runner therefore starts it as a child process in the environment named by `model.env`: `conda run -n <name> python -m interpretfm.cli stage extract --config <run_dir>/config.resolved.yaml --run-dir <run_dir>` (or `conda run -p <prefix>`, or the interpreter in `env.python`). The child's output goes to `<stage dir>/log.txt`; the child writes the stage's manifest. The package must be installed in that environment (`python -m pip install -e .` inside it). A missing environment, interpreter or conda is reported before anything runs: for example `model.env.conda: conda environment 'scgpt' does not exist (known: [...])`. `conda` is found through `CONDA_EXE` (set by `conda activate`) or `PATH`; set `INTERPRETFM_CONDA` to choose a binary.
+
+## Toy example
+
+```python
+from interpretfm.testing import write_toy_run
+cfg_path = write_toy_run("example")     # example/data/toy.h5ad + example/toy.yaml (300 cells, 50 genes, coordinates in 0.5 µm units)
+```
+
+```bash
+interpretfm validate example/toy.yaml
+interpretfm run example/toy.yaml --dry-run
+interpretfm run example/toy.yaml --stages ingest
+interpretfm status example/runs/toy
+```
+
+`configs/toy.yaml` is the same configuration, for a dataset written to `data/toy.h5ad` at the repository root.
+
+## Python API
+
+```python
+from interpretfm import load_config, run
+cfg = load_config("config.yaml")
+rows = run(cfg, stages=["ingest", "extract"], force=False, dry_run=False)   # one dict per stage with its status
+```
+
+Implementing a stage (for contributors): register a function that receives a `StageContext` and writes its declared outputs into `ctx.stage_dir`.
+
+```python
+from interpretfm.runner import register_stage, StageContext
+
+@register_stage("tis", inputs=["extract"], outputs=["tis.json"], replace=True)
+def run_tis(ctx: StageContext):
+    params = ctx.params                       # config.stages.tis
+    store_dir = ctx.input_dir("extract")      # <run_dir>/02_extract
+    ...
+    ctx.write_json("tis.json", result)
+    return {"n_layers": len(ctx.config.model.layers)}   # recorded in manifest["extra"]
+```
+
+`env="model"` on the decorator makes the runner execute the stage in the model environment; `applies=lambda cfg: ...` makes it skippable.

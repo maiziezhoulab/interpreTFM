@@ -25,7 +25,7 @@ Every measure is meant to be read next to its baseline, so that a feature-level 
 
 ## Repository status
 
-- This is a pre-release (0.9.0). It contains the `interp_pipeline` package used for the manuscript's analyses: model adapters and layer-resolved activation extraction, the sharded activation store, TIS, SAE helpers, held-out concept alignment, cell-level feature tables, and niche and interface building blocks.
+- This is the development version after the 0.9.0 pre-release (`1.0.0.dev0`). It contains the `interp_pipeline` package used for the manuscript's analyses: model adapters and layer-resolved activation extraction, the sharded activation store, TIS, SAE helpers, held-out concept alignment, cell-level feature tables, and niche and interface building blocks.
 - Several steps of the manuscript run from drivers that are not part of this pre-release: building the gene × concept matrix, the SAE trainer with the fixed ℓ1-weight rule and its untrained control, gene-token projection of features to cells, population specificity, the calibrated interface statistic with spillover checks, and the co-localization screen. The [concepts page](https://interpretfm.readthedocs.io/en/latest/concepts.html) states, for each measure, what 0.9 provides.
 - A v1.0 pipeline with a single entry point, per-model containers, a Hugging Face release of trained SAEs, and a tutorial is in preparation for the final publication. See the [roadmap](https://interpretfm.readthedocs.io/en/latest/roadmap.html).
 
@@ -54,7 +54,19 @@ Model weights, datasets and activation stores are not distributed with the code;
 
 ## Quick start
 
-In 0.9 the stages run as modules with `python -m`. The commands and snippets below are exercised on toy data by `tests/test_smoke.py`.
+**v1 pipeline (in development).** Version 1.0 runs every stage from one YAML configuration through the `interpretfm` command. The command, the configuration schema, the cached stage runner and the input stage are in place; the scientific stages are being moved behind it and stop with a clear message until then. Try it on a toy dataset:
+
+```bash
+python -c "from interpretfm.testing import write_toy_run; write_toy_run('example')"
+interpretfm validate example/toy.yaml
+interpretfm run example/toy.yaml --dry-run
+interpretfm run example/toy.yaml --stages ingest
+interpretfm status example/runs/toy
+```
+
+See the [configuration reference](https://interpretfm.readthedocs.io/en/latest/pipeline/configuration.html) and [running a pipeline](https://interpretfm.readthedocs.io/en/latest/pipeline/running.html).
+
+**0.9 analysis package.** The stages run as modules with `python -m`. The commands and snippets below are exercised on toy data by `tests/test_smoke.py`.
 
 Plan the all-layer SAE, QC and held-out F1 jobs for your activation stores (edit the paths in the example first). `--status-only` writes a job manifest and a status table and runs nothing:
 

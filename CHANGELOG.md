@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- v1 pipeline core (in development): the `interpretfm` command (`validate`, `run`, `status`, `report`, `version`), a typed YAML configuration (`run`, `dataset`, `model`, `stages`, `output`) with the spatial unit declared once as `dataset.spatial.um_per_unit`, a cached and resumable stage runner with `--stages`, `--force` and `--dry-run`, run and stage `manifest.json`, a subprocess boundary to per-model conda environments, the `ingest` stage, stubs for the remaining stages, toy fixtures (`interpretfm.testing`) and `configs/toy.yaml`.
+- Documentation pages for the configuration, running a pipeline and the run directory; API page for the pipeline core.
+
+### Changed
+
+- Version `1.0.0.dev0`; `pyyaml` is a dependency.
+
 ## [0.9.0] - 2026-11-05
 
 First public pre-release of the analysis package.

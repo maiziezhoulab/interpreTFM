@@ -1,6 +1,6 @@
 # Usage
 
-In the 0.9 pre-release, stages are run as Python modules (`python -m ...`) or called from Python. A single command that runs every stage from one configuration file is planned for v1.0 ([roadmap](roadmap.md)). The job-planning commands (section 2), the TIS and concept-alignment snippets (sections 3 and 4) and the niche sweep (section 6) are exercised on toy data by `tests/test_smoke.py`.
+In the 0.9 pre-release, stages are run as Python modules (`python -m ...`) or called from Python. A single command that runs every stage from one configuration file, `interpretfm run`, is in development for v1.0 ([running a pipeline](pipeline/running.md)); its scientific stages are stubs for now, so this page remains the way to run the analyses. The job-planning commands (section 2), the TIS and concept-alignment snippets (sections 3 and 4) and the niche sweep (section 6) are exercised on toy data by `tests/test_smoke.py`.
 
 ## Stages at a glance
 

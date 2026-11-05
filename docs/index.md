@@ -23,7 +23,7 @@ Each measure is meant to be read next to its baseline. The [concepts page](conce
 
 :::{note}
 This documentation describes the 0.9 pre-release. It contains the `interp_pipeline` package used for the manuscript's analyses; several steps still run from drivers that are not part of the pre-release and are marked as such on the [concepts page](concepts.md).
-A v1.0 pipeline with a single entry point, per-model containers, trained SAEs on Hugging Face and a tutorial is in preparation ([roadmap](roadmap.md)).
+A v1.0 pipeline with a single entry point, per-model containers, trained SAEs on Hugging Face and a tutorial is in preparation ([roadmap](roadmap.md)); its command, configuration schema and stage runner are in the development version ([running a pipeline](pipeline/running.md)).
 :::
 
 ```{toctree}
@@ -35,6 +35,15 @@ concepts
 data
 usage
 best_practices
+```
+
+```{toctree}
+:maxdepth: 2
+:caption: Pipeline (v1, in development)
+
+pipeline/configuration
+pipeline/running
+pipeline/run_directory
 ```
 
 ```{toctree}
