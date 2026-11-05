@@ -26,7 +26,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from interpretfm.stores import iter_shards, list_shards
+from interpretfm.stores import iter_shards, list_shards, torch_load
 
 LAMBDA_GRID = (0.1, 0.3, 1.0, 3.0, 10.0)
 ARCHITECTURE = "relu_sae_with_biases_raw_space"
@@ -158,7 +158,7 @@ def save_checkpoint(path: Union[str, Path], state: Dict[str, torch.Tensor], d_in
 
 
 def load_checkpoint(path: Union[str, Path]) -> Dict[str, Any]:
-    ckpt = torch.load(str(path), map_location="cpu")
+    ckpt = torch_load(path)
     if not isinstance(ckpt, dict):
         raise RuntimeError(f"{path}: SAE checkpoint must be a dict")
     state = ckpt.get("state_dict", ckpt if all(torch.is_tensor(v) for v in ckpt.values()) else None)
@@ -220,9 +220,9 @@ def iter_batches(store_root: Union[str, Path], layer: str, batch_size: int, seed
         order = list(shards)
         rng.shuffle(order)
         for shard in order:
-            X = torch.load(shard / "activations.pt", map_location="cpu").float()
+            X = torch_load(shard / "activations.pt").float()
             if special:
-                idx = torch.load(shard / "index.pt", map_location="cpu")
+                idx = torch_load(shard / "index.pt")
                 toks = idx.get("token_ids")
                 if toks is not None and len(toks) == X.shape[0]:
                     keep = np.array([str(t) not in special for t in toks], dtype=bool)

@@ -85,13 +85,22 @@ def select_shards(shards: Sequence[Path], max_shards: Optional[int] = None, even
     return shards[: int(max_shards)]
 
 
-def load_shard(shard: Union[str, Path]):
-    """``(activations[N, H] float32 tensor, index dict)`` of one shard."""
+def torch_load(path: Union[str, Path]):
+    """``torch.load`` of a trusted local file (full unpickling; stores and checkpoints hold
+    plain tensors, lists and dicts)."""
     import torch
 
+    try:
+        return torch.load(str(path), map_location="cpu", weights_only=False)
+    except TypeError:  # older torch without weights_only
+        return torch.load(str(path), map_location="cpu")
+
+
+def load_shard(shard: Union[str, Path]):
+    """``(activations[N, H] float32 tensor, index dict)`` of one shard."""
     shard = Path(shard)
-    X = torch.load(shard / "activations.pt", map_location="cpu")
-    idx = torch.load(shard / "index.pt", map_location="cpu")
+    X = torch_load(shard / "activations.pt")
+    idx = torch_load(shard / "index.pt")
     if not isinstance(idx, dict):
         raise RuntimeError(f"{shard}/index.pt: expected a dict")
     return X.float(), idx

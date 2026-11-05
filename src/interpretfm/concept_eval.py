@@ -37,7 +37,7 @@ from interp_pipeline.get_annotation.f1_alignment import (
 )
 from interpretfm.genes import TokenResolver
 from interpretfm.sae import Encoder
-from interpretfm.stores import iter_shards, list_shards, select_shards
+from interpretfm.stores import iter_shards, list_shards, select_shards, torch_load
 
 THRESHOLDS = (0.0, 0.15, 0.3, 0.6)
 UNITS = ("row", "gene")
@@ -108,7 +108,7 @@ def assign_rows(store_root: Union[str, Path], layer: str, resolver: TokenResolve
     dropped = 0
     row_keys = {r: k for k, r in key_to_row.items()}
     for shard in shards:
-        idx = torch.load(shard / "index.pt", map_location="cpu")
+        idx = torch_load(shard / "index.pt")
         if idx.get("token_unit", "gene") != "gene" or idx.get("token_ids") is None:
             continue
         toks = idx["token_ids"]
