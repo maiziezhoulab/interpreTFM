@@ -49,6 +49,7 @@ pipeline/stage_sae
 pipeline/stage_concepts
 pipeline/stage_concept_eval
 pipeline/stage_gene_readout
+reproducing
 ```
 
 ```{toctree}

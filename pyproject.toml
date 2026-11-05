@@ -90,6 +90,9 @@ include = ["interp_pipeline*", "interpretfm*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+markers = [
+  "reproduction: compares results on the manuscript's cached data with the published numbers (skipped unless the data are configured; see docs/reproducing.md)",
+]
 
 [tool.ruff]
 # Conservative on purpose: the package is research code kept close to the version used for
