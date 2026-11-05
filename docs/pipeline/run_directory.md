@@ -13,7 +13,7 @@ runs/<name>/
     dataset_qc.json      the stage's outputs
     coords_um.csv        spatial data only: cell_index, x_um, y_um
   02_extract/<layer>/shard_*/   the activation store (unchanged 0.9 format), store.json
-  03_tis/ 04_sae/ 05_concepts/ 06_cells/ 07_layers/ 08_spatial/ 09_report/
+  03_tis/ 04_sae/ 05_concepts/ 06_concept_eval/ 07_gene_readout/ 08_cells/ 09_layers/ 10_spatial/ 11_report/
 ```
 
 Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The planned contents of the stage directories follow the layout in the [roadmap](../roadmap.md) and are filled in as the stages are implemented.

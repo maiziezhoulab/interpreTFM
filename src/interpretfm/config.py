@@ -54,10 +54,11 @@ from typing import Any, Dict, List, Optional, Union
 import yaml
 
 #: Stage names in pipeline order. The runner numbers stage directories in this order.
-STAGE_ORDER = ["ingest", "extract", "tis", "sae", "concepts", "cells", "layers", "spatial", "report"]
+STAGE_ORDER = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers",
+               "spatial", "report"]
 
 #: Stages that take parameters from the ``stages`` section (``ingest`` has none beyond ``dataset.qc``).
-PARAM_STAGES = ["extract", "tis", "sae", "concepts", "cells", "layers", "spatial", "report"]
+PARAM_STAGES = [s for s in STAGE_ORDER if s != "ingest"]
 
 _TOP_LEVEL = {"run", "dataset", "model", "stages", "output"}
 
