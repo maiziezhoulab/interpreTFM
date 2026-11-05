@@ -84,8 +84,9 @@ def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None) -> Dict[st
     """Tiny settings for the model-level stages so that the toy pipeline runs on a CPU in seconds."""
     params: Dict[str, Dict[str, Any]] = {
         "tis": {"trials": 40, "k_ref": 8, "controls": ["shuffle", "pca"]},
-        "sae": {"width_multiplier": 2, "lambda": {"grid": [0.1, 1.0]}, "steps": 60, "lr": 1.0e-3, "warmup": 5,
-                "resample_every": 30, "batch_size": 64, "device": "cpu", "qc": {"max_shards": 4, "rows_per_shard": 256}},
+        "sae": {"width_multiplier": 2, "lambda": {"grid": [1.0, 3.0], "rule": {"l0_max": 0.3, "dead_max": 0.25}},
+                "steps": 300, "lr": 1.0e-2, "warmup": 5, "resample_every": 100, "batch_size": 64, "device": "cpu",
+                "qc": {"max_shards": 4, "rows_per_shard": 256}},
         "concepts": {},
         "concept_eval": {"top_m": 20, "batch_size": 1024},
         "gene_readout": {"n_splits": 2, "controls": ["random", "coexpression", "coexpression_pc50", "celltype", "trivial"]},
