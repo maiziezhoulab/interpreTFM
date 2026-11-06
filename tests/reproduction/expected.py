@@ -102,3 +102,82 @@ SPATIAL_COSMX_SCGPT = {
                        "xenium_config": "xenium_scgpt_layer3"},
     "niche_concepts": {"shared_top25": (2, 8, 8), "jaccard": (0.042, 0.190, 0.190)},
 }
+
+# Spatial numbers of the other five layers (P3-C). CosMx: the author labels, the manuscript's three-niche
+# configuration per model (SPS stage-B summary, `strict_v2_summary_counts.csv`). Xenium: the marker-derived labels
+# (per-cell CSV, 14 labels incl. low_quality), the five-niche partition per model (readthrough P1: `p1_summary_k5.csv`,
+# `p1_crosstalk_counts.csv`, `p1_concept_jaccard_summary.csv`, `C3_lr_screen_xenium.csv`), with the three-niche
+# configuration of the stage-B summary as the second fixed configuration. Niche configurations are written in native
+# units (CosMx px, Xenium µm) as `r<radius>/<space>/<method>/k<k>`.
+SPATIAL_OTHER = {
+    "cosmx_geneformer_layer2": {
+        "labels": "author_cell_type",
+        "niche": {"config": "r120/m/kmeans/k3", "ari": 0.342, "nmi": 0.292, "seed_ari": 0.998, "sizes": (27956, 24312, 28968), "rank": 1},
+        "expression_baseline": {"winner": "r120/m/gmm/k3", "ari": 0.301, "nmi": 0.317, "at_model_config": (0.268, 0.269)},
+        "label_composition": {"ari": 0.269, "nmi": 0.289},
+        "interfaces": SPATIAL_COSMX_SCGPT["interfaces_other_models"]["geneformer"],
+        "niche_concepts_vs": {"c2sscale": {"shared_top25": (6, 10, 11), "jaccard": (0.136, 0.250, 0.282)}},
+    },
+    "cosmx_c2s_layer14": {
+        "labels": "author_cell_type",
+        "niche": {"config": "r100/m/kmeans/k3", "ari": 0.377, "nmi": 0.323, "seed_ari": 0.998, "sizes": (27453, 25826, 27957), "rank": 1},
+        "expression_baseline": {"winner": "r120/m/gmm/k3", "ari": 0.301, "nmi": 0.317, "at_model_config": (0.287, 0.292)},
+        "label_composition": {"ari": 0.269, "nmi": 0.289},
+        "interfaces": SPATIAL_COSMX_SCGPT["interfaces_other_models"]["c2sscale"],
+    },
+    "xenium_scgpt_layer3": {
+        "labels": "marker_label",
+        "niche": {"config": "r100/xm/gmm/k5", "ari": 0.0809, "nmi": 0.1443, "ari_excl_lowq": 0.0891, "ari_tacco": 0.0264,
+                  "seed_ari": 0.9995, "purity": 0.531, "null": 0.484, "score": 3.7412, "rank": 17,
+                  "sizes": (101058, 89078, 68372, 87980, 118732), "cores": 3},
+        "niche_k3": {"config": "r100/m/gmm/k3", "ari": 0.0551, "nmi": 0.120, "seed_ari": 0.9999, "sizes": (126151, 155333, 183736)},
+        "expression_baseline": {"winner": "r100/m/gmm/k5", "ari": 0.0754, "nmi": 0.1425, "at_model_config": (0.0900, 0.1817)},
+        "label_composition": {"ari": 0.0738, "nmi": 0.1564},
+        "interfaces": {"n_tests": 376, "enriched": 15, "depleted": 27, "z_star": 2.097, "share_abs_z_gt_2_tile": 0.372, "share_abs_z_gt_2_calibrated": 0.122,
+                       "fpr_pct": (8.2, 5.9, None), "neighbour_corr_Padj": 0.141, "niche_free": {"n_pairs": 78, "enriched": 5, "depleted": 11}},
+        "niche_concepts_vs": {"geneformer": {"matched_mean": 0.308, "unmatched_mean": 0.073, "jaccard": (0.282, 0.351, 0.163, 0.429, 0.316), "shared": (11, 13, 7, 15, 12)},
+                              "c2sscale": {"matched_mean": 0.262, "unmatched_mean": 0.095, "jaccard": (0.316, 0.282, 0.042, 0.389, 0.282), "shared": (12, 11, 2, 14, 11)}},
+    },
+    "xenium_geneformer_layer2": {
+        "labels": "marker_label",
+        "niche": {"config": "r120/m/kmeans/k5", "ari": 0.0773, "nmi": 0.1410, "ari_excl_lowq": 0.0860, "ari_tacco": 0.0314,
+                  "seed_ari": 0.9987, "purity": 0.876, "null": 0.681, "score": 3.7391, "rank": 18,
+                  "sizes": (60661, 104282, 110418, 100330, 89529), "cores": 3},
+        "niche_k3": {"config": "r150/m/gmm/k3", "ari": 0.0591, "nmi": 0.123, "seed_ari": 0.9999, "sizes": (159669, 154676, 150875)},
+        "expression_baseline": {"winner": "r100/m/gmm/k5", "ari": 0.0754, "nmi": 0.1425, "at_model_config": (0.0518, 0.1052)},
+        "label_composition": {"ari": 0.0738, "nmi": 0.1564},
+        "interfaces": {"n_tests": 382, "enriched": 11, "depleted": 44, "z_star": 2.063, "share_abs_z_gt_2_tile": 0.335, "share_abs_z_gt_2_calibrated": 0.152,
+                       "fpr_pct": (11.1, 5.7, None), "neighbour_corr_Padj": 0.180, "niche_free": {"n_pairs": 78, "enriched": 4, "depleted": 24}},
+        "niche_concepts_vs": {"c2sscale": {"matched_mean": 0.287, "unmatched_mean": 0.099, "jaccard": (0.087, 0.316, 0.471, 0.282, 0.282), "shared": (4, 12, 16, 11, 11)}},
+    },
+    "xenium_c2s_layer14": {
+        "labels": "marker_label",
+        "niche": {"config": "r100/xm/kmeans/k5", "ari": 0.0684, "nmi": 0.1448, "ari_excl_lowq": 0.0766, "ari_tacco": 0.0343,
+                  "seed_ari": 0.9957, "purity": 0.866, "null": 0.699, "score": 3.7356, "rank": 11,
+                  "sizes": (140757, 80464, 115707, 52139, 76153), "cores": 3},
+        "niche_k3": {"config": "r150/m/gmm/k3", "ari": 0.0602, "nmi": 0.124, "seed_ari": 0.9999, "sizes": (170974, 153311, 140935)},
+        "expression_baseline": {"winner": "r100/m/gmm/k5", "ari": 0.0754, "nmi": 0.1425, "at_model_config": (0.0338, 0.0946)},
+        "label_composition": {"ari": 0.0738, "nmi": 0.1564},
+        "interfaces": {"n_tests": 376, "enriched": 18, "depleted": 24, "z_star": 2.048, "share_abs_z_gt_2_tile": 0.311, "share_abs_z_gt_2_calibrated": 0.120,
+                       "fpr_pct": (12.2, 5.9, None), "neighbour_corr_Padj": 0.182, "niche_free": {"n_pairs": 78, "enriched": 5, "depleted": 13}},
+    },
+}
+
+# The Xenium ligand–receptor screen (marker labels, 100 µm, seed 11; `C3_lr_screen_xenium.csv`) and the placement of
+# its robust hits on the five-niche partitions (`p1_lr_screen_niche_context.csv`, ratio of the share of close pairs over
+# the niche's share of cells, niches in the cached order n0…n4).
+LR_SCREEN_XENIUM = {
+    "n_pairs": 25, "n_pairs_ge3": 24, "hits_ge1": 3, "hits_ge3": 8, "robust": 3, "depleted": 3,
+    "robust_pairs": ("CCL19_CCR7", "CDH1_CDH1", "CLEC2C_KLRB1"),
+    "robust_fold_ge1": {"CCL19_CCR7": 2.577, "CDH1_CDH1": 1.674, "CLEC2C_KLRB1": 1.468},
+    "radius_um": 100.0, "seed": 11,
+    "placement_k5": {
+        "xenium_scgpt_layer3": {"CCL19_CCR7": (3.20, 0.07, 1.90, 0.00, 0.05), "CLEC2C_KLRB1": (2.83, 0.39, 1.66, 0.07, 0.21), "CDH1_CDH1": (0.97, 2.94, 0.69, 0.25, 0.31)},
+        "xenium_geneformer_layer2": {"CCL19_CCR7": (0.78, 0.03, 0.00, 0.26, 4.34), "CLEC2C_KLRB1": (0.79, 0.25, 0.08, 0.48, 3.73), "CDH1_CDH1": (0.08, 2.42, 0.20, 0.56, 1.44)},
+        "xenium_c2s_layer14": {"CCL19_CCR7": (3.10, 0.31, 0.01, 0.05, 0.02), "CLEC2C_KLRB1": (2.71, 0.55, 0.08, 0.25, 0.22), "CDH1_CDH1": (0.95, 0.94, 0.21, 0.15, 2.94)},
+    },
+}
+
+#: Xenium reference inputs of the interface test (marker labels: exact label = group, no group map).
+XENIUM_INTERFACE_MODELS = {"scgpt": ("layer_2.norm2", "r100p0_xm_gmm_k5"), "geneformer": ("layer_1", "r120p0_m_kmeans_k5"),
+                           "c2sscale": ("layer_13", "r100p0_xm_kmeans_k5")}

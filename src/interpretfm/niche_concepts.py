@@ -191,5 +191,59 @@ def summarize_jaccard(pairs: pd.DataFrame) -> Dict[str, Any]:
             "unmatched_mean_jaccard": float(u["jaccard"].mean()) if len(u) else None}
 
 
-__all__ = ["RANK_KEYS", "bh_fdr", "concept_sets", "cross_model_jaccard", "jaccard", "match_niches", "niche_composition",
-           "niche_feature_tests", "summarize_jaccard", "top_concepts"]
+# --- cross-model recipe ---------------------------------------------------------------------------
+
+
+def read_niche_run(run_dir, layer: str, config: Optional[str] = None) -> Tuple[pd.DataFrame, pd.Series]:
+    """The top-concept table and the niche labels (indexed by cell) of a finished ``niches`` stage:
+    the sweep winner, or the fixed configuration ``config`` (``r18um/xm/kmeans/k3``: the
+    ``niche_at_<config>`` column of ``labels.csv`` and ``top_concepts_at_<config>.csv``)."""
+    from pathlib import Path
+
+    from interpretfm.runner import stage_dir
+
+    ldir = Path(stage_dir(run_dir, "niches")) / layer
+    labels = pd.read_csv(ldir / "labels.csv", dtype={"cell": str}).set_index("cell")
+    if config is None:
+        return pd.read_csv(ldir / "top_concepts.csv"), labels["niche"].astype(str)
+    col = f"niche_at_{config}"
+    if col not in labels.columns:
+        raise KeyError(f"{ldir / 'labels.csv'}: no column {col!r} (fixed configurations: "
+                       f"{[c for c in labels.columns if c.startswith('niche_at_')]})")
+    return pd.read_csv(ldir / f"top_concepts_at_{config.replace('/', '_')}.csv"), labels[col].astype(str)
+
+
+def cross_model_concepts(runs: Dict[str, Tuple[pd.DataFrame, pd.Series]], ref_labels: pd.Series, key: str = "concept",
+                         ) -> pd.DataFrame:
+    """The manuscript's cross-model comparison of niche concept labels for every pair of runs
+    (Supplementary Note S1): niches are matched by label composition on the cells both runs
+    labelled (:func:`match_niches` with ``ref_labels``, a cell-indexed Series of the dataset's
+    labels), and the top-concept sets of matched and unmatched niche pairs are compared
+    (:func:`cross_model_jaccard`). One row per pair of runs: the matching, the shared labels and
+    Jaccard of every matched niche (in the order of the first run's niches), and the matched and
+    unmatched means. ``runs`` maps a name to ``(top_concepts, niche_labels)`` as
+    :func:`read_niche_run` returns them."""
+    names = list(runs)
+    rows = []
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            top_a, lab_a = runs[a]
+            top_b, lab_b = runs[b]
+            cells = lab_a.index.intersection(lab_b.index)
+            ref = ref_labels.reindex(cells)
+            ok = ref.notna().to_numpy()
+            mapping, _cost = match_niches(niche_composition(lab_a.reindex(cells)[ok], ref[ok]),
+                                          niche_composition(lab_b.reindex(cells)[ok], ref[ok]))
+            pairs = cross_model_jaccard(top_a, top_b, mapping, key=key)
+            summ = summarize_jaccard(pairs)
+            matched = pairs[pairs["matched"]].sort_values("niche_a", key=lambda s: s.astype(str).map(lambda v: (len(v), v)))
+            rows.append({"model_a": a, "model_b": b, "n_cells": int(ok.sum()),
+                         "matching": ";".join(f"{k}->{v}" for k, v in sorted(mapping.items(), key=lambda kv: (len(kv[0]), kv[0]))),
+                         "n_shared": [int(v) for v in matched["n_shared"]], "jaccard": [round(float(v), 4) for v in matched["jaccard"]],
+                         "matched_mean_jaccard": summ["matched_mean_jaccard"], "unmatched_mean_jaccard": summ["unmatched_mean_jaccard"],
+                         "max_shared_matched": int(matched["n_shared"].max()) if len(matched) else 0})
+    return pd.DataFrame(rows)
+
+
+__all__ = ["RANK_KEYS", "bh_fdr", "concept_sets", "cross_model_concepts", "cross_model_jaccard", "jaccard", "match_niches",
+           "niche_composition", "niche_feature_tests", "read_niche_run", "summarize_jaccard", "top_concepts"]

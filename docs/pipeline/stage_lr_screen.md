@@ -2,7 +2,7 @@
 
 Directory `12_lr_screen/`. Inputs: `ingest` and `niches` (the niche partition used to place the hits). Core environment, CPU; about a minute for 80,000 cells and 400 pairs. Applies only when `dataset.spatial` is set; a configuration without coordinates records the stage as `skipped`. Needs `dataset.labels`.
 
-**The screen is model-free.** It reads the dataset only: the raw counts, the coordinates in their native unit and the labels of `dataset.labels`. No activation, feature or other foreground-model output enters it, and it is computed once per run regardless of the model and layers. The manuscript presents it as the model-free reference: a reader compares the feature-based spatial results (niches, interfaces) with what the measured transcripts and the coordinates already show. Only the last step, the niche placement of the hits, uses a model-derived object, the niche partition of each projected layer, and it is descriptive (where in the tissue a hit lives).
+**The screen is model-free.** It reads the dataset only: the raw counts, the coordinates in their native unit and the labels of `dataset.labels` (or of `stages.lr_screen.labels`). No activation, feature or other foreground-model output enters it, and it is computed once per run regardless of the model and layers. The manuscript presents it as the model-free reference: a reader compares the feature-based spatial results (niches, interfaces) with what the measured transcripts and the coordinates already show. Only the last step, the niche placement of the hits, uses a model-derived object, the niche partition of each projected layer, and it is descriptive (where in the tissue a hit lives).
 
 ## What it computes
 
@@ -49,6 +49,7 @@ Cross-section matching is a recipe, not a command: compute the reference count w
 | `min_positive` | 100 | minimum positive cells per side for a pair to be tested |
 | `q_max`, `fold_min` | 0.05, 1.2 | hit rule |
 | `database`, `complexes` | packaged | CSV overrides (`complexes: false` for none) |
+| `labels` | `dataset.labels` | a label set for this stage with the keys of `dataset.labels` (`column`, `file`, `file_column`) for the within-type null and the cell-type pairs (the manuscript's Xenium screen permutes within marker-derived labels from a per-cell CSV) |
 | `niche` | `{column: niche}` | niche partition column of `10_niches/<layer>/labels.csv`, or `{config: <label>}` for `niche_at_<label>` |
 | `niche_labels` | – | `{<layer>: csv}` overrides (a `cell` column and the niche column) |
 | `placement` | true | compute the niche placement |

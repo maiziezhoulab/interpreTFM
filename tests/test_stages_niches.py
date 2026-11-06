@@ -320,3 +320,21 @@ def test_stage_label_override(toy_run, tmp_path):
     bad.stages["niches"] = dict(bad.stages.get("niches", {}), labels={"file": str(csv)})
     with pytest.raises(Exception, match="column"):
         stage_labels(bad, bad.stage_params("niches"), "niches")
+
+
+def test_cross_model_recipe_on_a_run(toy_run):
+    """`read_niche_run` reads a run's niche labels and top concepts; `cross_model_concepts` on the same run twice
+    gives the identity matching and Jaccard 1 for every matched niche."""
+    from interpretfm.niche_concepts import cross_model_concepts, read_niche_run
+
+    cfg = toy_run
+    layer = cfg.model.layers[0]
+    top, lab = read_niche_run(cfg.run.out_dir, layer)
+    assert set(top.columns) >= {"niche", "concept", "rank"} and lab.index.name == "cell" and len(lab) > 0
+    cells = pd.read_csv(stage_dir(cfg.run.out_dir, "niches").parent / "01_ingest" / "cells.csv", dtype={"cell": str}).set_index("cell")
+    table = cross_model_concepts({"a": (top, lab), "b": (top, lab)}, cells["label"].astype(str))
+    assert len(table) == 1 and table.iloc[0]["model_a"] == "a" and table.iloc[0]["n_cells"] == len(lab)
+    assert all(abs(j - 1.0) < 1e-12 for j in table.iloc[0]["jaccard"]) and table.iloc[0]["matched_mean_jaccard"] == pytest.approx(1.0)
+    assert all(f"{n}->{n}" in table.iloc[0]["matching"] for n in lab.unique())
+    with pytest.raises(KeyError, match="no column"):
+        read_niche_run(cfg.run.out_dir, layer, "r1um/m/kmeans/k9")
