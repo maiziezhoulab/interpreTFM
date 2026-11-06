@@ -14,7 +14,7 @@ dataset:
   h5ad: ${INTERPRETFM_DATA}/cosmx_human_lung_sec8.h5ad   # 81,236 cells x 960 genes, X = raw counts
   counts_layer: null
   gene_id: {column: index, kind: ensembl}                 # var_names are Ensembl ids; symbols in var["feature_name"]
-  labels: {column: author_cell_type}
+  labels: {column: author_cell_type, groups: cosmx_author_groups.csv}   # author types -> the manuscript's 16 interface groups
   spatial: {obsm: spatial, um_per_unit: 0.18}             # CosMx pixel coordinates, 0.18 um per pixel
   qc: {min_transcripts: 0, min_genes: 0}                  # no cell filtering in the manuscript
 
@@ -128,6 +128,29 @@ stages:
     seed_stability: {k: [4, 5]}
     concepts: {top_k: 25, active_threshold: 0.0, min_cells: 20, rank_by: effect}
     fixed_configs: [{radius_um: 21.6, space: m, method: kmeans, k: 3}]   # the manuscript's selected configuration, validated whatever the sweep picks
+
+  # Interfaces: the manuscript's strict crosstalk test on the author labels grouped as in the paper
+  # (dataset.labels.groups): edge radius and stratum block 120 px = 21.6 um (the block is kept at the paper's
+  # value although it holds few cells per stratum), legacy tile 400 px = 72 um, smooth-field length scales
+  # 60 / 150 / 400 px; 100 permutations, calibration 50 permutations x 2 fields per scale, legacy 20;
+  # covariates: log counts, log genes, log bounding-box area (Width x Height); niches of the manuscript's
+  # configuration. Fired-on genes from the first 4 store shards (the manuscript's row budget for this model).
+  interfaces:
+    edge_radius_um: 21.6
+    block_um: 21.6
+    legacy_tile_um: 72.0
+    length_scales_um: [10.8, 27.0, 72.0]
+    n_perm: 100
+    calib_perm: 50
+    calib_reps: 2
+    legacy_perm: 20
+    min_edges: 50
+    clip_quantile: 0.995
+    exclude_groups: [low_quality, unresolved]
+    covariates: {area: {product: [Width, Height]}}
+    niche: {config: "r21.6um/m/kmeans/k3"}
+    markers: {enabled: true, top_n: 10}
+    fired_on: {enabled: true, max_shards: 4, threshold: 0.15, rate: 0.2, mass: 0.8}
 
 output:
   html: true

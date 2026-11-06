@@ -8,7 +8,7 @@ The stage validates the AnnData file against the `dataset` section and stops wit
 
 - **raw counts**: the matrix declared as counts (`X`, or `adata.layers[counts_layer]`) must be finite, non-negative and integer-valued (checked on the first 5,000 cells). Normalized or log-transformed data are rejected with a message pointing at `dataset.counts_layer`.
 - **gene names**: the names from `dataset.gene_id` must be non-empty and unique; a warning is recorded when they do not look like the declared `kind` (`symbol` / `ensembl`).
-- **labels**: `dataset.labels.column` must exist in `obs` when declared. Without labels the population-specificity metrics and the label-based summaries are skipped (recorded as a warning).
+- **labels**: `dataset.labels.column` must exist in `obs` when declared, or, with `dataset.labels.file`, every cell of the dataset must appear in that per-cell CSV (`file_column`, default `label`). With `dataset.labels.groups` / `group_map` the coarser group of every cell is written to the cell table and labels without a group are listed in the QC (a warning). Without labels the population-specificity metrics and the label-based summaries are skipped (recorded as a warning).
 - **coordinates**: `dataset.spatial.obsm` must exist and be `n_cells × 2` (or more) when `dataset.spatial` is declared, and `um_per_unit` is required by the schema. Coordinates are converted to micrometres once ([units](configuration.md#sections)) and written to `coords_um.csv` and `cells.csv`.
 
 ## QC flags
@@ -25,7 +25,7 @@ The share of panel genes present in the model's gene vocabulary, matched by key,
 01_ingest/
   dataset_qc.json       n_cells, n_genes, counts check, transcripts/genes per cell, qc (thresholds, n_pass, n_flagged),
                         genes (kind, symbols/Ensembl available, never-detected genes), vocab_coverage, labels, spatial, warnings
-  cells.csv             cell, n_transcripts, n_genes, qc_pass, label, x_um, y_um
+  cells.csv             cell, n_transcripts, n_genes, qc_pass, label[, group], x_um, y_um
   vocab_coverage.csv    key, symbol, ensembl, in_vocab, matched_name       (when a vocabulary was found)
   coords_um.csv         cell_index, x_um, y_um                             (spatial data)
 ```

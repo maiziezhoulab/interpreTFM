@@ -95,6 +95,8 @@ def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None) -> Dict[st
                    "n_pcs": 8, "n_null": 3, "label_composition": {"radius_um": 12.0, "k": 2, "n_init": 3},
                    "seed_stability": {"k": [3]}, "concepts": {"top_k": 3, "min_cells": 5},
                    "fixed_configs": [{"radius_um": 12.0, "space": "m", "method": "kmeans", "k": 2}]},
+        "interfaces": {"edge_radius_um": 12.0, "block_um": 25.0, "min_edges": 5, "n_perm": 20, "calib_perm": 10, "calib_reps": 1,
+                       "legacy_perm": 5, "markers": {"top_n": 3}, "fired_on": {"max_shards": 2}},
     }
     if concepts_csv is not None:
         params["concepts"]["offline_matrix"] = str(concepts_csv)

@@ -78,6 +78,17 @@ SPATIAL_COSMX_SCGPT = {
     "interfaces": {"n_tests": 129, "share_abs_z_gt_2_tile": 0.178, "share_abs_z_gt_2_calibrated": 0.054, "enriched": 2,
                    "depleted": 5, "z_star": 2.00, "effect_median_pct": 0.13, "effect_max_pct": 1.48,
                    "fpr_pct": (6.3, 4.8, 6.2), "niche_free": {"n_pairs": 86, "enriched": 2, "depleted": 7}},
+    "interfaces_other_models": {   # same run, author labels (AUDIT §4 / the manuscript's summary table): the stage is model-agnostic
+        "geneformer": {"n_tests": 132, "enriched": 3, "depleted": 6, "z_star": 2.00, "share_abs_z_gt_2_tile": 0.189, "share_abs_z_gt_2_calibrated": 0.068,
+                       "niche_free": {"n_pairs": 86, "enriched": 2, "depleted": 0}},
+        "c2sscale": {"n_tests": 125, "enriched": 1, "depleted": 4, "z_star": 2.054, "share_abs_z_gt_2_tile": 0.208, "share_abs_z_gt_2_calibrated": 0.040,
+                     "niche_free": {"n_pairs": 86, "enriched": 2, "depleted": 2}},
+    },
+    # partner-marker tercile over the three models' niche-free calls (Supplementary note; primary row of the a3 summary)
+    "tercile": {"n_rows": 39, "n_pairs": 13, "median_g": 0.071, "ci": (-0.770, 0.581), "verdict": "CI includes 0"},
+    # marker-excluded QC (p6): spillover-robust pairs and the tercile gradient of the reduced score
+    "marker_excluded": {"n_pairs": 13, "robust": ("macrophage|treg", "t_cd4_memory|dendritic", "t_cd4_memory|t_cd8_memory"),
+                        "reduced_median_g": -1.067, "reduced_ci": (-2.056, 0.079)},
     "lr_screen": {"n_pairs": 397, "hits_ge1": 7, "hits_ge3": 33, "robust": 3},
     "matched_radius": {"cosmx_px": 652.8, "cosmx_um": 117.5, "cosmx_cells": 287, "xenium_um": 15.4, "xenium_cells": 7.2},
     "niche_concepts": {"shared_top25": (2, 8, 8), "jaccard": (0.042, 0.190, 0.190)},

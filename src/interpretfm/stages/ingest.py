@@ -15,7 +15,11 @@ Gene coverage: the share of panel genes found in the model's gene vocabulary
 Coordinates are converted to micrometres once (:func:`interpretfm.units.adata_coords_um`) and
 written to ``coords_um.csv`` and ``cells.csv``.
 
-Outputs: ``dataset_qc.json``, ``cells.csv`` (cell, n_transcripts, n_genes, qc_pass, label,
+Labels come from the ``obs`` column or from ``dataset.labels.file`` (a CSV keyed by cell id,
+:func:`interpretfm.ingest.dataset_labels`); with ``dataset.labels.groups`` / ``group_map`` the
+cell table also carries the coarser ``group`` of every cell and the QC lists labels without a group.
+
+Outputs: ``dataset_qc.json``, ``cells.csv`` (cell, n_transcripts, n_genes, qc_pass, label[, group],
 x_um, y_um), ``vocab_coverage.csv`` (when a vocabulary was found) and ``coords_um.csv``
 (spatial data).
 """
@@ -31,12 +35,15 @@ from interpretfm.ingest import (
     check_gene_names,
     check_raw_counts,
     counts_matrix,
+    dataset_labels,
     find_vocab,
+    label_group_map,
     per_cell_counts,
     qc_flags,
     vocab_coverage,
     vocab_names,
 )
+from interpretfm.interfaces import group_labels, norm_label
 from interpretfm.runner import StageContext, register_stage
 from interpretfm.units import adata_coords_um
 
@@ -101,15 +108,22 @@ def run_ingest(ctx: StageContext) -> Optional[Dict[str, Any]]:
     qc["vocab_coverage"] = cov
 
     # labels
-    labels = None
-    if ds.labels is not None:
-        if ds.labels.column not in adata.obs.columns:
-            raise IngestError(f"dataset.labels.column: '{ds.labels.column}' not in adata.obs (columns: {list(adata.obs.columns)})")
-        labels = adata.obs[ds.labels.column].astype(str).values
+    labels = dataset_labels(ds, adata)
+    groups = None
+    if labels is not None:
         counts = pd.Series(labels).value_counts()
-        qc["labels"] = {"column": ds.labels.column, "n_labels": int(len(counts)),
-                        "n_labels_ge_30_cells": int((counts >= 30).sum()),
+        qc["labels"] = {"column": ds.labels.column, "file": str(ds.labels.file) if ds.labels.file else None,
+                        "n_labels": int(len(counts)), "n_labels_ge_30_cells": int((counts >= 30).sum()),
                         "counts": {str(k): int(v) for k, v in counts.items()}}
+        gmap = label_group_map(ds)
+        if gmap:
+            _exact, groups = group_labels(labels, gmap)
+            gcounts = pd.Series(groups).value_counts()
+            unmapped = sorted(set(norm_label(x) for x in counts.index) - set(gmap))
+            qc["labels"]["groups"] = {"n_groups": int(len(gcounts)), "counts": {str(k): int(v) for k, v in gcounts.items()},
+                                      "labels_without_group": unmapped}
+            if unmapped:
+                qc["warnings"].append(f"{len(unmapped)} label(s) are not in dataset.labels.groups/group_map and form their own group: {unmapped[:10]}")
     else:
         qc["labels"] = None
         qc["warnings"].append("no dataset.labels: population specificity and label-based summaries are skipped")
@@ -136,6 +150,8 @@ def run_ingest(ctx: StageContext) -> Optional[Dict[str, Any]]:
     cells = pd.DataFrame({"cell": [str(o) for o in adata.obs_names], "n_transcripts": totals,
                           "n_genes": n_genes_per_cell, "qc_pass": passing})
     cells["label"] = labels if labels is not None else ""
+    if groups is not None:
+        cells["group"] = groups
     if coords_um is not None:
         cells["x_um"], cells["y_um"] = coords_um[:, 0], coords_um[:, 1]
     cells.to_csv(ctx.path("cells.csv"), index=False)

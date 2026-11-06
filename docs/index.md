@@ -53,6 +53,7 @@ pipeline/stage_gene_readout
 pipeline/stage_cells
 pipeline/stage_layers
 pipeline/stage_niches
+pipeline/stage_interfaces
 pipeline/stage_report
 reproducing
 ```

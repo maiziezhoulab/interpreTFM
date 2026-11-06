@@ -123,7 +123,7 @@ def test_layers_stage_reports_every_criterion_separately(toy_run):
 
 def test_report_stage_and_cli(toy_run, capsys):
     cfg, run_dir = toy_run
-    out = run_dir / "11_report"
+    out = run_dir / "12_report"
     report = json.load(open(out / "report.json"))
     assert report["spatial"]["status"] == "not run" and report["dataset"]["vocab_coverage"]["fraction"] == 0.9
     assert {m["criterion"] for m in report["metrics"]} == {c["criterion"] for c in report["recommendations"]["criteria"]}

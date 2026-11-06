@@ -8,15 +8,17 @@ it works on Python 3.8–3.11 with PyYAML only). Sections:
 ``dataset``
     ``h5ad`` (path), ``counts_layer`` (``null`` = ``X`` holds raw counts), ``gene_id``
     (``column``: ``index`` or a ``var`` column; ``kind``: ``symbol`` or ``ensembl``),
-    ``labels`` (optional: ``column`` in ``obs``), ``spatial`` (optional: ``obsm`` key and
-    ``um_per_unit``; omitted = scRNA-seq mode, spatial stages are skipped), ``qc``.
+    ``labels`` (optional: ``column`` in ``obs``, or ``file`` + ``file_column`` for a per-cell
+    CSV keyed by cell id; ``groups`` (CSV) / ``group_map`` (inline) map labels to coarser
+    groups), ``spatial`` (optional: ``obsm`` key and ``um_per_unit``; omitted = scRNA-seq mode,
+    spatial stages are skipped), ``qc``.
 ``model``
     ``name``, ``checkpoint``, ``env`` (where extraction runs; see :mod:`interpretfm.envs`),
     ``layers``, ``cell_pooling``, ``special_tokens``, ``representative_layer``, ``vocab``
     (optional JSON gene vocabulary, used by ``ingest`` to report gene coverage).
 ``stages``
     One mapping per stage name (``extract``, ``tis``, ``sae``, ``concepts``, ``cells``,
-    ``layers``, ``niches``, ``report``) holding that stage's parameters. The runner hashes the
+    ``layers``, ``niches``, ``interfaces``, ``report``) holding that stage's parameters. The runner hashes the
     section of a stage together with ``dataset``, ``model`` and ``run.seed`` to decide whether a
     cached result is still valid; the stage implementation reads it through
     :meth:`Config.stage_params`.
@@ -61,7 +63,7 @@ import yaml
 
 #: Stage names in pipeline order. The runner numbers stage directories in this order.
 STAGE_ORDER = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers",
-               "niches", "report"]
+               "niches", "interfaces", "report"]
 
 #: Stages that take parameters from the ``stages`` section (``ingest`` has none beyond ``dataset.qc``).
 PARAM_STAGES = [s for s in STAGE_ORDER if s != "ingest"]
@@ -173,8 +175,21 @@ class GeneId:
 
 @dataclass
 class Labels:
-    column: str  #: ``obs`` column with cell labels
+    """Cell labels: an ``obs`` column, or a CSV keyed by cell id (``file`` with the labels in
+    ``file_column``; cells missing from the file are an error at ingest). ``groups`` (a CSV
+    with columns ``label``/``cell_type`` and ``group``) or ``group_map`` (inline ``{label:
+    group}``) assign labels to coarser groups for the interface test; labels not listed form
+    their own group. Group lookups ignore case and treat spaces, slashes and hyphens as ``_``."""
+
+    column: str  #: ``obs`` column with cell labels (the label name used in outputs)
     groups: Optional[Path] = None  #: optional CSV mapping labels to coarser groups
+    group_map: Dict[str, str] = field(default_factory=dict)  #: inline label -> group mapping
+    file: Optional[Path] = None  #: optional CSV with one row per cell (index = cell id)
+    file_column: str = "label"  #: the label column of ``file``
+
+    @property
+    def has_groups(self) -> bool:
+        return self.groups is not None or bool(self.group_map)
 
 
 @dataclass
@@ -230,11 +245,18 @@ class DatasetSection:
         labels = None
         if raw.get("labels") is not None:
             lab = _require_mapping(raw.get("labels"), where + ".labels", errors)
-            _unknown_keys(lab, {"column", "groups"}, where + ".labels", errors)
+            _unknown_keys(lab, {"column", "groups", "group_map", "file", "file_column"}, where + ".labels", errors)
             col = _get_str(lab, "column", where + ".labels", errors, required=True)
             groups = _get_str(lab, "groups", where + ".labels", errors)
+            gmap = _require_mapping(lab.get("group_map"), where + ".labels.group_map", errors)
+            if any(not isinstance(k, str) or not isinstance(v, str) for k, v in gmap.items()):
+                errors.append(f"{where}.labels.group_map: expected a mapping of label strings to group strings")
+                gmap = {}
+            lfile = _get_str(lab, "file", where + ".labels", errors)
+            fcol = _get_str(lab, "file_column", where + ".labels", errors, default="label") or "label"
             if col:
-                labels = Labels(column=col, groups=_resolve(base, groups) if groups else None)
+                labels = Labels(column=col, groups=_resolve(base, groups) if groups else None, group_map={str(k): str(v) for k, v in gmap.items()},
+                                file=_resolve(base, lfile) if lfile else None, file_column=fcol)
 
         spatial = None
         if "spatial" in raw and raw["spatial"] is not None:
@@ -564,6 +586,8 @@ def check_files(cfg: Config) -> List[str]:
         problems.append(f"dataset.h5ad: file not found: {cfg.dataset.h5ad}")
     if cfg.dataset.labels and cfg.dataset.labels.groups and not cfg.dataset.labels.groups.is_file():
         problems.append(f"dataset.labels.groups: file not found: {cfg.dataset.labels.groups}")
+    if cfg.dataset.labels and cfg.dataset.labels.file and not cfg.dataset.labels.file.is_file():
+        problems.append(f"dataset.labels.file: file not found: {cfg.dataset.labels.file}")
     if cfg.model.checkpoint is not None and not cfg.model.checkpoint.exists():
         problems.append(f"model.checkpoint: path not found: {cfg.model.checkpoint}")
     if cfg.model.vocab is not None and not cfg.model.vocab.is_file():

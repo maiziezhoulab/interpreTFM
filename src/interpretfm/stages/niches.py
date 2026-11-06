@@ -49,6 +49,7 @@ from typing import Any, Dict, Optional
 import numpy as np
 import pandas as pd
 
+from interpretfm.ingest import dataset_labels
 from interpretfm.niche_concepts import niche_feature_tests, top_concepts
 from interpretfm.niches import (
     EXPRESSION_VARIANTS,
@@ -215,8 +216,8 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
         raise KeyError(f"dataset.spatial.obsm: '{sp.obsm}' not in adata.obsm")
     coords_all = np.asarray(adata.obsm[sp.obsm], dtype=np.float64)[:, :2]
     obs_names = pd.Index([str(o) for o in adata.obs_names])
-    has_labels = cfg.dataset.labels is not None
-    labels_all = adata.obs[cfg.dataset.labels.column].astype(str).to_numpy() if has_labels else None
+    labels_all = dataset_labels(cfg.dataset, adata)
+    has_labels = labels_all is not None
     cells_dir = ctx.input_dir("cells") if not overrides else None
 
     grid_info = grid.to_dict(upu)
