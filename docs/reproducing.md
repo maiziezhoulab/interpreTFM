@@ -40,6 +40,17 @@ make repro-test                           # pytest tests/reproduction -m reprodu
 
 `make repro` is `interpretfm run configs/paper/<name>.yaml --env-file configs/paper/paths.env --stages ...`; the run is cached and resumable, so it can be restarted after an interruption and re-run for a subset of stages. On a CPU the stages take minutes (`tis`, `sae`, `concepts`) to hours (`concept_eval`: six passes over the store; `gene_readout`: one pass plus the probes), so start it detached (for example in `tmux`) and run the tests afterwards. Setting `INTERPRETFM_REPRO_RUN=1` lets a test run the missing stages itself.
 
+### Fresh extraction (GPU)
+
+The paper configurations start from the cached stores. `configs/paper/extract_cosmx_scgpt.yaml` and `extract_cosmx_geneformer.yaml` instead extract 2,000 seeded CosMx cells per model in the model's own environment on a GPU, through the runner's subprocess path, so that the adapters can be checked against the manuscript's stores. They need three more variables in the env file: `INTERPRETFM_SCGPT_ENV` and `INTERPRETFM_GENEFORMER_ENV` (the conda environments of `envs/interpretfm.yml` and `envs/geneformer.yml`, with the package importable in them) and `INTERPRETFM_GENEFORMER_MODEL` (the Geneformer model folder).
+
+```bash
+CUDA_VISIBLE_DEVICES=0 interpretfm run configs/paper/extract_cosmx_scgpt.yaml --env-file configs/paper/paths.env --stages ingest,extract
+INTERPRETFM_REPRO_GPU=1 make repro-test     # adds test_extraction.py: runs both configurations (cached when done) and compares
+```
+
+The test (`tests/reproduction/test_extraction.py`) requires, for every cell, the same token sequence as the cached store and a per-token cosine of at least 0.999, and a per-cell cosine of at least 0.999 for the features projected through the cached SAE (and against the paper run's `cells.h5ad` when it exists). On the manuscript's stores both models give identical token sequences for all 2,000 cells, a minimum cosine of 0.9999995 per token and above 0.9999999 per projected cell; the reports are written to `02_extract/check_*.json` of each run ([stage extract](pipeline/stage_extract.md)).
+
 What each test checks, and the tolerance (AUDIT numbering of the acceptance tests):
 
 | Test | Compares | Tolerance |
@@ -64,6 +75,7 @@ What each test checks, and the tolerance (AUDIT numbering of the acceptance test
 | T10 `test_t10_interface_test` | the `interfaces` stage of the paper run on the pipeline's own r100 niches; the niche-free numbers, the calibration and the fired-on gene sets are exact | niche-stratified counts ±3 and shares ±2 pp (see below); the rest as above |
 | `test_partner_marker_tercile_and_marker_excluded_from_cache` | partner markers (identical sets), the partner-marker tercile over the three models (39 rows / 13 pairs, median g 0.071, CI [-0.770, 0.581]) and the marker-excluded re-test (3 spillover-robust pairs; reduced-score median g -1.067, CI [-2.056, 0.079]; the full score on the same permutations equals the tercile row) | g and CI ±0.005, counts exact |
 | T11-T12 | LR screen, matched radius | placeholders until the next spatial stage lands |
+| `test_fresh_extraction_matches_cached_store` (GPU, `INTERPRETFM_REPRO_GPU=1`) | 2,000 cells extracted in the model environment (scGPT `layer_1.norm2`, Geneformer `layer_1`) vs the cached store: token sequences, per-token cosine, projected features through the cached SAE | identical token sequences; cosine ≥ 0.999 per token and per projected cell |
 
 Every comparison prints one line `observed | manuscript | cached source | tolerance` (`-s`).
 

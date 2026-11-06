@@ -32,6 +32,22 @@ The v1 pipeline layer: configuration schema, stage runner, manifests, the model-
 .. automodule:: interpretfm.envs
 ```
 
+## `interpretfm.extract`
+
+```{eval-rst}
+.. automodule:: interpretfm.extract
+```
+
+## `interpretfm.models`
+
+```{eval-rst}
+.. automodule:: interpretfm.models
+```
+
+```{eval-rst}
+.. automodule:: interpretfm.models.base
+```
+
 ## `interpretfm.stores`
 
 ```{eval-rst}

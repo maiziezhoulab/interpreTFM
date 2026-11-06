@@ -1,0 +1,33 @@
+# Apptainer definition of the main interpreTFM environment: the translation of Dockerfile.interpretfm.
+# Build from the repository root (not tested locally; see containers/README.md):
+#   apptainer build --fakeroot interpretfm.sif containers/interpretfm.def
+# For the Geneformer and C2S-Scale environments, copy this file, change ENV_NAME and the base image to the
+# values of the corresponding Dockerfile, and add the Geneformer package steps of Dockerfile.geneformer to %post.
+Bootstrap: docker
+From: nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+%files
+    envs /opt/interpretfm/envs
+    src /opt/interpretfm/src
+    plot /opt/interpretfm/plot
+    pyproject.toml /opt/interpretfm/pyproject.toml
+    README.md /opt/interpretfm/README.md
+    LICENSE /opt/interpretfm/LICENSE
+
+%post
+    export DEBIAN_FRONTEND=noninteractive ENV_NAME=interpretfm CONDA_DIR=/opt/conda
+    apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git bzip2 && rm -rf /var/lib/apt/lists/*
+    curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o /tmp/miniforge.sh
+    bash /tmp/miniforge.sh -b -p $CONDA_DIR && rm /tmp/miniforge.sh
+    export PATH=$CONDA_DIR/bin:$PATH
+    cd /opt/interpretfm
+    conda env create -f envs/$ENV_NAME.yml && conda clean -afy
+    conda run -n $ENV_NAME python -m pip install --no-deps -e .
+    conda run -n $ENV_NAME python -c "import interpretfm, interp_pipeline; print(interp_pipeline.__version__)"
+
+%environment
+    export PATH=/opt/conda/envs/interpretfm/bin:/opt/conda/bin:$PATH
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec python -m interpretfm.cli "$@"

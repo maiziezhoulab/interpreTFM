@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# C2S-Scale extraction environment: envs/c2s.yml (Gemma-2 stack, torch 2.8) + this repository.
+# Build from the repository root:
+#   docker build -f containers/Dockerfile.c2s -t interpretfm-c2s:1.0 .
+# Build not tested locally (no container runtime on the development machine); see containers/README.md.
+ARG BASE_IMAGE=nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ARG ENV_NAME=c2s
+ENV DEBIAN_FRONTEND=noninteractive \
+    CONDA_DIR=/opt/conda \
+    PATH=/opt/conda/bin:$PATH \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git bzip2 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o /tmp/miniforge.sh \
+    && bash /tmp/miniforge.sh -b -p ${CONDA_DIR} \
+    && rm /tmp/miniforge.sh \
+    && conda clean -afy
+
+WORKDIR /opt/interpretfm
+COPY envs/${ENV_NAME}.yml envs/
+RUN conda env create -f envs/${ENV_NAME}.yml && conda clean -afy
+
+# The C2S-Scale weights (vandijklab on Hugging Face) stay outside the image: model.checkpoint names them on the host.
+COPY . .
+RUN conda run -n ${ENV_NAME} python -m pip install --no-deps -e . \
+    && conda run -n ${ENV_NAME} python -c "import interpretfm, interp_pipeline; print(interp_pipeline.__version__)"
+
+ENV PATH=/opt/conda/envs/${ENV_NAME}/bin:$PATH
+ENTRYPOINT []
+CMD ["python", "-m", "interpretfm.cli", "--help"]

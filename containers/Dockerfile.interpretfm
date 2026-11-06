@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+# interpreTFM main environment: scGPT extraction, SAE training and every CPU stage.
+# Build from the repository root (the context must hold src/ and envs/):
+#   docker build -f containers/Dockerfile.interpretfm -t interpretfm:1.0 .
+# Build not tested locally (no container runtime on the development machine); see containers/README.md.
+ARG BASE_IMAGE=nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ARG ENV_NAME=interpretfm
+ENV DEBIAN_FRONTEND=noninteractive \
+    CONDA_DIR=/opt/conda \
+    PATH=/opt/conda/bin:$PATH \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git bzip2 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Miniforge (conda-forge only, matching the channels of envs/*.yml)
+RUN curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o /tmp/miniforge.sh \
+    && bash /tmp/miniforge.sh -b -p ${CONDA_DIR} \
+    && rm /tmp/miniforge.sh \
+    && conda clean -afy
+
+WORKDIR /opt/interpretfm
+COPY envs/${ENV_NAME}.yml envs/
+RUN conda env create -f envs/${ENV_NAME}.yml && conda clean -afy
+
+# The package itself, editable, without touching the pinned environment
+COPY . .
+RUN conda run -n ${ENV_NAME} python -m pip install --no-deps -e . \
+    && conda run -n ${ENV_NAME} python -c "import interpretfm, interp_pipeline; print(interp_pipeline.__version__)"
+
+# `python` is the environment's interpreter: the pipeline runs `python -m interpretfm.cli ...` inside the image
+ENV PATH=/opt/conda/envs/${ENV_NAME}/bin:$PATH
+ENTRYPOINT []
+CMD ["python", "-m", "interpretfm.cli", "--help"]

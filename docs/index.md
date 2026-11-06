@@ -45,6 +45,7 @@ pipeline/configuration
 pipeline/running
 pipeline/run_directory
 pipeline/stage_ingest
+pipeline/stage_extract
 pipeline/stage_tis
 pipeline/stage_sae
 pipeline/stage_concepts
