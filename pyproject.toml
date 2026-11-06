@@ -57,6 +57,8 @@ dependencies = [
 models = ["transformers>=4.30", "nnsight>=0.4", "datasets>=2.14"]
 # GO hierarchy utilities used by interp_pipeline.downstream.f1.go_reduce.
 annotation = ["goatools>=1.2"]
+# Export of trained SAEs to a Hugging Face-ready folder and loading from the Hub (interpretfm.hub).
+hub = ["safetensors>=0.4", "huggingface_hub>=0.20"]
 docs = [
   "sphinx>=7.2",
   "myst-parser>=2.0",
