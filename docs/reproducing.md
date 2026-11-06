@@ -42,14 +42,14 @@ make repro-test                           # pytest tests/reproduction -m reprodu
 
 ### Fresh extraction (GPU)
 
-The paper configurations start from the cached stores. `configs/paper/extract_cosmx_scgpt.yaml` and `extract_cosmx_geneformer.yaml` instead extract 2,000 seeded CosMx cells per model in the model's own environment on a GPU, through the runner's subprocess path, so that the adapters can be checked against the manuscript's stores. They need three more variables in the env file: `INTERPRETFM_SCGPT_ENV` and `INTERPRETFM_GENEFORMER_ENV` (the conda environments of `envs/interpretfm.yml` and `envs/geneformer.yml`, with the package importable in them) and `INTERPRETFM_GENEFORMER_MODEL` (the Geneformer model folder).
+The paper configurations start from the cached stores. `configs/paper/extract_cosmx_scgpt.yaml`, `extract_cosmx_geneformer.yaml` and `extract_cosmx_c2s.yaml` instead extract 2,000 seeded CosMx cells per model (the same seed-0 subset for all three) in the model's own environment on a GPU, through the runner's subprocess path, so that the adapters can be checked against the manuscript's stores. They need five more variables in the env file: `INTERPRETFM_SCGPT_ENV`, `INTERPRETFM_GENEFORMER_ENV` and `INTERPRETFM_C2S_ENV` (the conda environments of `envs/interpretfm.yml`, `envs/geneformer.yml` and `envs/c2s.yml`, with the package importable in them), `INTERPRETFM_GENEFORMER_MODEL` (the Geneformer model folder) and `INTERPRETFM_C2S_MODEL` (a local folder of `vandijklab/C2S-Scale-Gemma-2-2B`).
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 interpretfm run configs/paper/extract_cosmx_scgpt.yaml --env-file configs/paper/paths.env --stages ingest,extract
-INTERPRETFM_REPRO_GPU=1 make repro-test     # adds test_extraction.py: runs both configurations (cached when done) and compares
+INTERPRETFM_REPRO_GPU=1 make repro-test     # adds test_extraction.py and test_extraction_c2s.py: runs the three configurations (cached when done) and compares
 ```
 
-The test (`tests/reproduction/test_extraction.py`) requires, for every cell, the same token sequence as the cached store and a per-token cosine of at least 0.999, and a per-cell cosine of at least 0.999 for the features projected through the cached SAE (and against the paper run's `cells.h5ad` when it exists). On the manuscript's stores both models give identical token sequences for all 2,000 cells, a minimum cosine of 0.9999995 per token and above 0.9999999 per projected cell; the reports are written to `02_extract/check_*.json` of each run ([stage extract](pipeline/stage_extract.md)).
+The tests (`tests/reproduction/test_extraction.py`, `test_extraction_c2s.py`) require, for every cell, the same token sequence as the cached store and a per-token cosine of at least 0.999, and a per-cell cosine of at least 0.999 for the features projected through the cached SAE (and against the paper run's `cells.h5ad` when it exists). On the manuscript's stores the three models give identical token sequences for all 2,000 cells, a minimum cosine of 0.999999 per token and above 0.9999999 per projected cell; the reports are written to `02_extract/check_*.json` of each run ([stage extract](pipeline/stage_extract.md)).
 
 What each test checks, and the tolerance (AUDIT numbering of the acceptance tests):
 
@@ -78,7 +78,7 @@ What each test checks, and the tolerance (AUDIT numbering of the acceptance test
 | T11 `test_t11_lr_screen_matched_radius_from_dataset` | the same screen with `match_neighbors_to` = the Xenium section's mean count at 100 µm (286.67): matched radius 652.8 px = 117.5 µm (286.70 other cells), 2 / 52 hits, 1 robust (CEACAM6), per pair against the manuscript's matched-radius table; about five minutes | radius ±0.1 px, counts exact, fold / z / q ±0.005 |
 | T12 `test_t12_matched_neighbour_radii` | coordinates only, both sections (the Xenium coordinates through the Xenium paper configuration): CosMx 7.20 other cells at 100 px and 286.70 at 652.8 px, Xenium 286.67 at 100 µm and 7.24 at 15.4 µm, the matched radii 652.8 px and 15.4 µm; against the cached `p10_matched_radii.json` | counts ±0.01, radii ±0.1 unit (cached values to 1e-9) |
 | T11/T12 `test_t11_t12_lr_screen_stage` | the `lr_screen` stage of the paper run: the T11 counts and per-pair values, 7.20 other cells within 100 px, the placement of the robust hits on the pipeline's own niches (matched to the cached niches by their ratio pattern) | as T11; placement ratios ±0.05 (see below) |
-| `test_fresh_extraction_matches_cached_store` (GPU, `INTERPRETFM_REPRO_GPU=1`) | 2,000 cells extracted in the model environment (scGPT `layer_1.norm2`, Geneformer `layer_1`) vs the cached store: token sequences, per-token cosine, projected features through the cached SAE | identical token sequences; cosine ≥ 0.999 per token and per projected cell |
+| `test_fresh_extraction_matches_cached_store`, `test_fresh_c2s_extraction_matches_cached_store` (GPU, `INTERPRETFM_REPRO_GPU=1`) | 2,000 cells extracted in the model environment (scGPT `layer_1.norm2`, Geneformer `layer_1`, C2S-Scale `layer_13`) vs the cached store: token sequences, per-token cosine, projected features through the cached SAE | identical token sequences; cosine ≥ 0.999 per token and per projected cell |
 
 Every comparison prints one line `observed | manuscript | cached source | tolerance` (`-s`).
 

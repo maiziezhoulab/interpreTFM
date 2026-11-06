@@ -41,11 +41,15 @@ class C2SScaleAdapter(ModelAdapter):
         device = torch.device(spec.device)
         cache_dir = spec.options.get("cache_dir") if spec.options else None
         max_genes = spec.options.get("max_genes") if spec.options else None
+        torch_dtype = spec.options.get("torch_dtype") if spec.options else None
+        if isinstance(torch_dtype, str):
+            torch_dtype = {"float32": torch.float32, "bfloat16": torch.bfloat16, "float16": torch.float16}[torch_dtype]
 
         model, tokenizer = load_c2s_model(
             model_name_or_path=spec.checkpoint,
             cache_dir=cache_dir,
             device=device,
+            torch_dtype=torch_dtype,
         )
         processor = C2SProcessor(max_genes=max_genes)
         return C2SHandle(model=model, tokenizer=tokenizer, processor=processor, device=device)
@@ -162,6 +166,39 @@ class C2SScaleAdapter(ModelAdapter):
 
             yield {
                 "cell_ids": cell_ids,
+                "batch_input": batch_input,
+                "tokenized": tokenized,
+                "genes_ranked": genes_ranked,
+                "gene_spans": gene_spans,
+            }
+
+    def batches_from_prompts(
+        self,
+        model_handle: C2SHandle,
+        cell_ids: Sequence[str],
+        prompts: Sequence[str],
+        batch_size: int,
+    ) -> Iterable[Dict[str, Any]]:
+        """
+        Batches (the same keys as make_batches) from prompts rendered elsewhere, in the given
+        order: for callers that build the cell sentences themselves (the pipeline's extract
+        stage, which seeds the tie-breaking per cell).
+        """
+        if len(cell_ids) != len(prompts):
+            raise ValueError("cell_ids and prompts must have the same length")
+        for start in range(0, len(prompts), batch_size):
+            end = min(start + batch_size, len(prompts))
+            batch_input = [str(p) for p in prompts[start:end]]
+            tokenized = model_handle.tokenizer(batch_input)
+            genes_ranked = [extract_genes_from_prompt(prompt) for prompt in batch_input]
+            gene_spans = [
+                build_prompt_and_spans_from_rendered_prompt(
+                    tokenizer=model_handle.tokenizer, prompt=prompt, genes_ranked=genes_this_cell
+                )
+                for prompt, genes_this_cell in zip(batch_input, genes_ranked)
+            ]
+            yield {
+                "cell_ids": [str(c) for c in cell_ids[start:end]],
                 "batch_input": batch_input,
                 "tokenized": tokenized,
                 "genes_ranked": genes_ranked,

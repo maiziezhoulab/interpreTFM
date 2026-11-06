@@ -76,6 +76,14 @@ class ModelExtractor(ABC):
             raise ExtractionError("stages.extract.batch_size and rows_per_shard must be > 0")
         return {"model": self.name, "n_genes": len(genes.keys)}
 
+    def prepare(self, adata, spec: ExtractionSpec, log) -> None:
+        """Called once with the **whole** dataset before any cell subset is applied (no-op by default).
+
+        Adapters whose tokenization depends on dataset-level state record it here, so that a
+        cell's tokens do not change with ``stages.extract.cell_subset`` (C2S-Scale: the shard
+        and the position of every cell, which seed the tie-breaking of its cell sentence).
+        """
+
     def gene_names(self, genes: GeneTable) -> List[Optional[str]]:
         """The panel's names in the model's vocabulary kind (``None`` where unknown)."""
         return list(genes.symbols if self.gene_kind == "symbol" else genes.ensembl)

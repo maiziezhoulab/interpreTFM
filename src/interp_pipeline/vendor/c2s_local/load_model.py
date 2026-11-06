@@ -32,6 +32,7 @@ def load_c2s_model(
     model_name_or_path: str,
     cache_dir: Optional[str] = None,
     device: Union[str, torch.device] = "cuda",
+    torch_dtype: Optional[torch.dtype] = None,
 ) -> Tuple[PreTrainedModel, C2STokenizer]:
     """
     Load a C2S-Scale model and its tokenizer.
@@ -47,6 +48,7 @@ def load_c2s_model(
             - Local path to saved model
         cache_dir: Directory to cache downloaded models
         device: Device to load model on
+        torch_dtype: Parameter dtype (None: the transformers default, float32)
 
     Returns:
         Tuple of (model, tokenizer)
@@ -72,6 +74,7 @@ def load_c2s_model(
         model_name_or_path,
         cache_dir=cache_dir,
         trust_remote_code=True,
+        **({} if torch_dtype is None else {"torch_dtype": torch_dtype}),
     )
     model.to(device)
     model.eval()
