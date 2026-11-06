@@ -17,6 +17,16 @@ def cached_path(*parts: str) -> Optional[Path]:
 
 
 
+def dev_table(path: Path, tau: float):
+    """A cached held-out F1 table restricted to threshold ``tau`` (the manuscript's column is ``threshold_pct``)."""
+    import numpy as np
+    import pandas as pd
+
+    cols = ["concept", "feature", "threshold_pct", "f1", "tp"]
+    parts = [c[np.isclose(c.threshold_pct, tau)] for c in pd.read_csv(path, usecols=cols, chunksize=2_000_000)]
+    return pd.concat(parts, ignore_index=True).rename(columns={"threshold_pct": "threshold"})
+
+
 def report(label: str, observed, manuscript=None, cached=None, tol=None) -> str:
     """One line per compared number (shown with ``pytest -rA`` / ``-s``)."""
     parts = [f"{label}: observed {observed}"]

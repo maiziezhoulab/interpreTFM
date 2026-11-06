@@ -151,7 +151,7 @@ def test_units():
 def test_registry_has_all_builtin_stages_in_order():
     names = [s.name for s in list_stages()]
     assert names == ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers",
-                     "spatial", "report"]
+                     "niches", "report"]
     assert [s.dir_name for s in list_stages()][:2] == ["01_ingest", "02_extract"]
     assert {s.name: s.env for s in list_stages()}["extract"] == "model"
 
@@ -246,9 +246,9 @@ def test_spatial_stage_skipped_without_coordinates(tmp_path):
     cfg = load_config(write_toy_run(tmp_path, spatial=False))
     assert not cfg.dataset.is_spatial
     rows = plan(cfg)
-    assert {r["stage"]: r["action"] for r in rows}["spatial"] == "skip-na"
-    run(cfg, stages=["ingest", "spatial"])
-    assert StageManifest.read(stage_dir(cfg.run.out_dir, "spatial")).status == "skipped"
+    assert {r["stage"]: r["action"] for r in rows}["niches"] == "skip-na"
+    run(cfg, stages=["ingest", "niches"])
+    assert StageManifest.read(stage_dir(cfg.run.out_dir, "niches")).status == "skipped"
     qc = json.loads((stage_dir(cfg.run.out_dir, "ingest") / "dataset_qc.json").read_text())
     assert qc["spatial"] is None and qc["labels"]["n_labels"] == 3
 

@@ -33,7 +33,7 @@ def _layer(name, dataset, model, cache_model, layer, hidden_dim, tis_gain, f1_ro
         # concept F1 (raw, untrained SAE, sparse SAE)
         "concept_f1": {"row": dict(zip(("raw", "untrained", "sae"), f1_row)),
                        "gene": dict(zip(("raw", "untrained", "sae"), f1_gene))},
-        # cell level (TODO: tested after the cells stage lands)
+        # cell level (T6, T7)
         "gsi_excess": dict(zip(("raw", "sae", "genes"), gsi)),
         "mhr100": dict(zip(("raw", "sae", "genes", "chance"), mhr)),
         "features_kept": features_kept,
@@ -69,7 +69,8 @@ EXPECTED = {e["name"]: e for e in [
 #: The layer whose caches are complete today; the others are listed for P3.
 PRIMARY = "cosmx_scgpt_layer2"
 
-# Spatial numbers of the CosMx scGPT layer (AUDIT §4, T8-T13; TODO after the spatial stages land).
+# Spatial numbers of the CosMx scGPT layer (AUDIT §4, T8-T13). Niche configurations are written with the native
+# radius (CosMx pixels; r100 = 18 µm, r120 = 21.6 µm) as in the manuscript's tables.
 SPATIAL_COSMX_SCGPT = {
     "niche": {"config": "r100/xm/kmeans/k3", "ari": 0.419, "nmi": 0.358, "seed_ari": 0.989, "purity": 0.822, "null": 0.625, "z": 378.3},
     "expression_baseline": {"winner": "r120/m/gmm/k3", "ari": 0.301, "nmi": 0.317, "at_scgpt_config": (0.330, 0.351)},

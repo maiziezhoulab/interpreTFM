@@ -90,6 +90,40 @@ stages:
     dedup_cells: true
     device: cpu
 
+  # Cell level: retention (validation F1 >= 0.40 at tau 0.15, concepts with 5-100 panel genes),
+  # projection to cells, GSI excess / MHR@100 on every stored cell (n_cells above the dataset size
+  # reads all shards; the manuscript run read 75,745 cells), populations >= 30 cells, 5 label
+  # shuffles, seed 0.
+  cells:
+    retain: {tau: 0.15, min_valid_f1: 0.40, concept_size: [5, 100], min_features: 10, unit: row}
+    projection: {dedup_cells: true, batch_size: 8192}
+    specificity: {min_pop: 30, n_shuffles: 5, mhr_k: 100, n_leading: 3, n_assoc: 50, n_null: 50, n_cells: 100000,
+                  representations: [sae, raw, genes], exclude_qc_flagged: false, seed: 0}
+    device: cpu
+
+  # Niches: radii 100 / 120 / 150 um (Xenium coordinates are in um), otherwise the CosMx grid and
+  # score; label composition at the manuscript's 100 um / k = 3.
+  niches:
+    radii_um: [100.0, 120.0, 150.0]
+    k: [3, 4, 5]
+    methods: [kmeans, gmm]
+    spaces: [m, xm]
+    seeds: [0, 1, 2]
+    min_cluster: 150
+    n_pcs: 50
+    kernel: uniform
+    tile_mult: 4.0
+    n_null: 10
+    null_seed: 0
+    score: {ari: 1.5, purity_z: 0.1, sep: 1.0, purity_z_clip: 10.0}
+    baselines: [expression_svd50, label_composition]
+    expression: {n_components: 50, seed: 0}
+    label_composition: {radius_um: 100.0, k: 3, n_pcs: 15, n_init: 20, seed: 0}
+    expression_variants: {enabled: false, seeds: [0, 1, 2]}
+    seed_stability: {k: [4, 5]}
+    concepts: {top_k: 25, active_threshold: 0.0, min_cells: 20, rank_by: effect}
+    fixed_configs: [{radius_um: 150.0, space: m, method: gmm, k: 3}]   # the manuscript's selected configuration, validated whatever the sweep picks
+
 output:
   html: true
   json: true

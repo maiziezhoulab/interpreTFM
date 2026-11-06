@@ -26,7 +26,7 @@ Run directory (``run.out_dir``)::
 A stage is skipped when its directory holds a manifest with status ``done``, the same
 configuration hash (:meth:`interpretfm.config.Config.stage_hash`) and all declared outputs
 present; ``force`` re-runs it. Stages run in pipeline order; a stage whose ``applies``
-predicate is false for the configuration (for example ``spatial`` without coordinates) is
+predicate is false for the configuration (for example ``niches`` without coordinates) is
 recorded as ``skipped``.
 """
 from __future__ import annotations

@@ -83,9 +83,9 @@ def collect(cfg, run_dir: Union[str, Path]) -> Dict[str, Any]:
         stages.append({"stage": s.name, "dir": s.dir_name, "status": m.status if m else "not run",
                        "duration_s": m.duration_s if m else None, "error": (m.error or "").splitlines()[0] if m and m.error else None})
     by_name = {s["stage"]: s for s in stages}
-    spatial_status = by_name.get("spatial", {}).get("status", "not run")
-    spatial_note = {"done": "run", "skipped": "skipped: the dataset has no spatial coordinates",
-                    "failed": "failed (see 10_spatial/manifest.json)", "not run": "not run"}.get(spatial_status, spatial_status)
+    spatial_status = by_name.get("niches", {}).get("status", "not run")
+    spatial_note = {"done": "niches: run", "skipped": "skipped: the dataset has no spatial coordinates",
+                    "failed": "niches: failed (see 10_niches/manifest.json)", "not run": "not run"}.get(spatial_status, spatial_status)
     if spatial_status == "not run" and not cfg.dataset.is_spatial:
         spatial_note = "not run (scRNA-seq mode: no coordinates)"
 
@@ -95,6 +95,7 @@ def collect(cfg, run_dir: Union[str, Path]) -> Dict[str, Any]:
     sel = _read_json(dirs["cells"] / "selection.json") or {}
     spec = _read_json(dirs["cells"] / "specificity.json") or {}
     sae = _read_json(dirs["sae"] / "selected.json") or {}
+    niches = _read_json(dirs["niches"] / "selected.json") or {}
 
     metrics = []
     for r in table.to_dict(orient="records"):
@@ -122,9 +123,51 @@ def collect(cfg, run_dir: Union[str, Path]) -> Dict[str, Any]:
                 for layer, v in (sae.get("layers") or {}).items()} if sae else {},
         "cells": {"selection": sel.get("layers", {}), "specificity": {layer: {k: v for k, v in e.items() if k != "populations"}
                                                                       for layer, e in (spec.get("layers") or {}).items()}},
+        "niches": niche_metrics(niches),
         "how_to_read": HOW_TO_READ,
     }
     return _clean(report)
+
+
+def niche_metrics(niches: Dict[str, Any]) -> Dict[str, Any]:
+    """The niche numbers next to their baselines, per layer, from ``10_niches/selected.json``."""
+    out: Dict[str, Any] = {}
+    for layer, e in (niches.get("layers") or {}).items():
+        if e.get("skipped"):
+            out[layer] = {"skipped": e["skipped"]}
+            continue
+        sel, val, base = e.get("selected") or {}, e.get("validation") or {}, e.get("baselines") or {}
+        ex, lc = base.get("expression_svd50") or {}, base.get("label_composition") or {}
+        win, at = ex.get("winner") or {}, ex.get("at_model_config") or {}
+        stab = e.get("stability") or {}
+
+        def agree(d):
+            return {"ari": d.get("ari"), "nmi": d.get("nmi")}
+
+        out[layer] = {
+            "config": sel.get("config_native"), "n_cells": e.get("n_cells"), "n_features": e.get("n_features"),
+            "model": {**agree(val), "seed_ari": sel.get("seed_ari"), "purity": val.get("purity"),
+                      "purity_null_mean": val.get("purity_null_mean"), "purity_z": val.get("purity_z"), "sizes": val.get("sizes"),
+                      "score": sel.get("score")},
+            "baselines": {
+                "expression_winner": {"config": (win.get("selected") or {}).get("config_native"), **agree(win),
+                                      "seed_ari": (win.get("selected") or {}).get("seed_ari"), "purity": win.get("purity"),
+                                      "purity_null_mean": win.get("purity_null_mean"), "purity_z": win.get("purity_z"),
+                                      "skipped": win.get("skipped")} if ex else None,
+                "expression_at_model_config": {**agree(at), "purity": at.get("purity"), "purity_null_mean": at.get("purity_null_mean"),
+                                               "purity_z": at.get("purity_z")} if at else None,
+                "label_composition": {"config": (lc.get("published") or {}).get("config"), **agree(lc.get("published") or {})} if lc.get("published") else
+                                     ({"skipped": lc.get("skipped")} if lc else None),
+                "label_composition_at_model_config": {"config": (lc.get("at_model_config") or {}).get("config"),
+                                                      **agree(lc.get("at_model_config") or {})} if lc.get("at_model_config") else None,
+                "tile_null": {"purity_null_mean": val.get("purity_null_mean"), "purity_null_std": val.get("purity_null_std"),
+                              "tile_size": val.get("tile_size"), "n_null": val.get("n_null")},
+            },
+            "seed_stability": {"k": stab.get("k"), "model": (stab.get("model") or {}).get("median_seed_ari"),
+                               "expression": (stab.get("expression_svd50") or {}).get("median_seed_ari")},
+            "top_concepts": (e.get("concepts") or {}).get("top"),
+        }
+    return out
 
 
 # --- figures ------------------------------------------------------------------------------------
@@ -351,6 +394,25 @@ def render_html(report: Dict[str, Any], figures: Dict[str, str]) -> str:
     # spatial + stages
     parts.append("<h2>Spatial analyses</h2>")
     parts.append(f"<p>spatial: {html.escape(r['spatial']['note'])}</p>")
+    if r.get("niches"):
+        parts.append("<h3>Niches <span class='muted'>(ARI/NMI against the dataset labels; purity against the tile-shuffle null)</span></h3>")
+        rows = []
+        for layer, e in r["niches"].items():
+            if e.get("skipped"):
+                rows.append([layer, e["skipped"]] + ["–"] * 9)
+                continue
+            m, b = e["model"], e["baselines"]
+            ew, ea, lc = b.get("expression_winner") or {}, b.get("expression_at_model_config") or {}, b.get("label_composition") or {}
+            rows.append([layer, e.get("config"), m.get("ari"), m.get("nmi"), m.get("seed_ari"),
+                         f"{_fmt(m.get('purity'))} (null {_fmt(m.get('purity_null_mean'))}, z {_fmt(m.get('purity_z'), 4)})",
+                         f"{_fmt(ew.get('ari'))} / {_fmt(ew.get('nmi'))} at {ew.get('config') or '–'}" if ew and not ew.get("skipped") else "–",
+                         f"{_fmt(ea.get('ari'))} / {_fmt(ea.get('nmi'))}" if ea else "–",
+                         f"{_fmt(lc.get('ari'))} / {_fmt(lc.get('nmi'))} at {lc.get('config') or '–'}" if lc and not lc.get("skipped") else "–",
+                         f"{_fmt((e.get('seed_stability') or {}).get('model'))} vs expression {_fmt((e.get('seed_stability') or {}).get('expression'))}",
+                         "; ".join(f"niche {n}: {', '.join(v[:3])}" for n, v in (e.get("top_concepts") or {}).items())])
+        parts.append(_table(["layer", "selected configuration", "ARI", "NMI", "seed ARI", "purity (model)",
+                             "expression-only winner ARI / NMI", "expression at the model's configuration",
+                             "label composition ARI / NMI", "seed stability (median ARI, k 4-5)", "top concepts"], rows, base_cols=[6, 7, 8]))
     parts.append("<h2>Stages</h2>")
     rows = [[s["stage"], s["status"], s["duration_s"], s.get("error") or ""] for s in r["stages"]]
     parts.append(_table(["stage", "status", "seconds", "error"], rows))
@@ -372,4 +434,4 @@ def write_report(cfg, run_dir: Union[str, Path], out_dir: Union[str, Path], html
     return report
 
 
-__all__ = ["COLORS", "HOW_TO_READ", "collect", "make_figures", "render_html", "write_report"]
+__all__ = ["COLORS", "HOW_TO_READ", "collect", "make_figures", "niche_metrics", "render_html", "write_report"]

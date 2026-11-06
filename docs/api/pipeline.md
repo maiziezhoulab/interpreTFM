@@ -1,6 +1,6 @@
 # Pipeline core (`interpretfm`)
 
-The v1 pipeline layer: configuration schema, stage runner, manifests, the model-environment boundary, the toy fixtures and the model-level stages. See [configuration](../pipeline/configuration.md), [running a pipeline](../pipeline/running.md), [run directory](../pipeline/run_directory.md) and the stage pages ([ingest](../pipeline/stage_ingest.md), [tis](../pipeline/stage_tis.md), [sae](../pipeline/stage_sae.md), [concepts](../pipeline/stage_concepts.md), [concept_eval](../pipeline/stage_concept_eval.md), [gene_readout](../pipeline/stage_gene_readout.md), [cells](../pipeline/stage_cells.md), [layers](../pipeline/stage_layers.md), [report](../pipeline/stage_report.md)).
+The v1 pipeline layer: configuration schema, stage runner, manifests, the model-environment boundary, the toy fixtures and the model-level stages. See [configuration](../pipeline/configuration.md), [running a pipeline](../pipeline/running.md), [run directory](../pipeline/run_directory.md) and the stage pages ([ingest](../pipeline/stage_ingest.md), [tis](../pipeline/stage_tis.md), [sae](../pipeline/stage_sae.md), [concepts](../pipeline/stage_concepts.md), [concept_eval](../pipeline/stage_concept_eval.md), [gene_readout](../pipeline/stage_gene_readout.md), [cells](../pipeline/stage_cells.md), [layers](../pipeline/stage_layers.md), [niches](../pipeline/stage_niches.md), [report](../pipeline/stage_report.md)).
 
 ## `interpretfm.config`
 
@@ -98,6 +98,18 @@ The v1 pipeline layer: configuration schema, stage runner, manifests, the model-
 .. automodule:: interpretfm.layers
 ```
 
+## `interpretfm.niches`
+
+```{eval-rst}
+.. automodule:: interpretfm.niches
+```
+
+## `interpretfm.niche_concepts`
+
+```{eval-rst}
+.. automodule:: interpretfm.niche_concepts
+```
+
 ## `interpretfm.report`
 
 ```{eval-rst}
@@ -117,7 +129,7 @@ The v1 pipeline layer: configuration schema, stage runner, manifests, the model-
 .. automodule:: interpretfm.stages.gene_readout
 .. automodule:: interpretfm.stages.cells
 .. automodule:: interpretfm.stages.layers
-.. automodule:: interpretfm.stages.spatial
+.. automodule:: interpretfm.stages.niches
 .. automodule:: interpretfm.stages.report
 ```
 

@@ -51,7 +51,16 @@ What each test checks, and the tolerance (AUDIT numbering of the acceptance test
 | T3/T4 `test_t3_t4_concept_f1` | concept F1 recomputed from the store, plus identical partitions (row counts, test genes) | ±0.005; counts ±2 |
 | `test_concept_counts` | universe size, concepts scored per split, concepts marked (test F1 ≥ 0.5) | exact / ±2 |
 | T5 `test_t5_gene_readout` | probe AUROC (standardized and center-only) and best single dimension vs Table S3, with the published ordering | ±0.03 (five whole-gene splits drawn with the stage's seeds; same rule, different draws) |
-| T6-T13 | features kept, GSI/MHR, niches, interfaces, LR screen | placeholders until the `cells` and `spatial` stages land |
+| T6 `test_t6_features_kept_from_cache` | the retention rule on the cached row-split tables → Table S1 "Features kept" (all six layers) | ±1 |
+| T6 `test_t6_features_kept` | the `cells` stage: features and concepts kept | ±1 |
+| T7 `test_t7_gsi_excess_and_mhr` | GSI excess and MHR@100 of SAE features, raw dimensions and single genes (every stored cell, seed 0) vs Table S1 and the cached evaluation | ±0.005 |
+| T8 `test_t8_niche_selection_rule_from_cache` | the score and selection rule on the cached sweep table → r100/xm/kmeans/k3 with its seed ARI, purity, tile null and z; the cached labels' ARI/NMI | ±0.005 (purity ±0.01, z ±5 %) |
+| T8 `test_t8_niche_sweep_winner_and_validation` | the `niches` stage: winner and validation (Table S5) | same |
+| T9 `test_t9_label_composition_from_dataset` | the label-composition baseline on the dataset alone (author labels, 120 px, k = 3) | ±0.005 |
+| T9 `test_t9_expression_and_label_composition_baselines` | the `niches` stage: expression-only winner, expression at the scGPT configuration, label composition | ±0.005 |
+| T13 `test_t13_niche_concept_labels_from_cache` | niche concept labels of the cached scGPT niches (identical top-25 lists) and the labels shared with the cached Geneformer niches (2 / 8 / 8, Jaccard 0.042 / 0.190 / 0.190) | counts ±1, Jaccard ±0.005 |
+| T13 `test_t13_niche_concept_labels` | the same from the `niches` stage | same |
+| T10-T12 | interface test, LR screen, matched radius | placeholders until the next spatial stages land |
 
 Every comparison prints one line `observed | manuscript | cached source | tolerance` (`-s`).
 
@@ -60,3 +69,4 @@ Every comparison prints one line `observed | manuscript | cached source | tolera
 - Only the selected λ = 1 checkpoint of each layer is cached, so the `sae` stage of the paper configurations evaluates that checkpoint; the rule itself is tested on the cached QC of all five λ.
 - The gene-level readout draws its five whole-gene splits with the stage's seed rule (`seed + s`); the manuscript run took split 0 from the C2S-Scale held-out run and splits 1-4 from the same rule. Means over splits agree within their SD, not exactly.
 - The manuscript's TIS runs rotated the activations to their principal components as the PCA control; the stage default `pca_of: activations` reproduces them (`pca_of: expression` is the alternative).
+- The niche sweep's top scores are close (the CosMx scGPT winner r100/xm/kmeans/k3 leads r120/xm/kmeans/k3 by 0.002 in the manuscript's run). The clustering depends on the scikit-learn version through the PCA solver and k-means numerics, so the `niches` stage run in a newer environment can rank these two configurations the other way while every number of the published configuration stays within tolerance; the reproduction test reports both. The manuscript's environment (scikit-learn 1.3.2) reproduces the published winner.

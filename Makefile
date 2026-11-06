@@ -6,7 +6,7 @@
 PYTHON   ?= python
 ENV_FILE ?= configs/paper/paths.env
 CONFIG   ?= cosmx_scgpt_layer2
-STAGES   ?= ingest,extract,tis,sae,concepts,concept_eval,gene_readout
+STAGES   ?= ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,niches
 PYTEST   ?= $(PYTHON) -m pytest
 
 .PHONY: help lint test docs repro repro-validate repro-test repro-status
