@@ -16,7 +16,7 @@ it works on Python 3.8–3.11 with PyYAML only). Sections:
     (optional JSON gene vocabulary, used by ``ingest`` to report gene coverage).
 ``stages``
     One mapping per stage name (``extract``, ``tis``, ``sae``, ``concepts``, ``cells``,
-    ``layers``, ``spatial``, ``report``) holding that stage's parameters. The runner hashes the
+    ``layers``, ``niches``, ``report``) holding that stage's parameters. The runner hashes the
     section of a stage together with ``dataset``, ``model`` and ``run.seed`` to decide whether a
     cached result is still valid; the stage implementation reads it through
     :meth:`Config.stage_params`.
@@ -61,7 +61,7 @@ import yaml
 
 #: Stage names in pipeline order. The runner numbers stage directories in this order.
 STAGE_ORDER = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers",
-               "spatial", "report"]
+               "niches", "report"]
 
 #: Stages that take parameters from the ``stages`` section (``ingest`` has none beyond ``dataset.qc``).
 PARAM_STAGES = [s for s in STAGE_ORDER if s != "ingest"]

@@ -1,7 +1,7 @@
 # Running a pipeline
 
 :::{note}
-In development. The command, the configuration, the runner and the stages `ingest`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers` and `report` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and `spatial` is a stub that stops with a clear message (run everything else with `--stages ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,report`, or `interpretfm report` after the other stages; the report then says `spatial: not run`). `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
+In development. The command, the configuration, the runner and the stages `ingest`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers` and `report` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and the spatial stages so far cover the niches (`niches`; the interface test and the ligand–receptor screen follow), which are skipped for a dataset without coordinates. `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
 :::
 
 ## The command
@@ -34,12 +34,12 @@ Exit codes: 0 success; 1 a stage failed (its `manifest.json` holds the error); 2
 | 7 | `gene_readout` | extract, sae, concepts | core | `gene_readout.json`, `gene_readout.csv`, `per_concept.csv.gz` |
 | 8 | `cells` | ingest, extract, sae, concepts, concept_eval | core | `selection.json`, `specificity.json` |
 | 9 | `layers` | tis, sae, concept_eval, gene_readout, cells | core | `layer_table.csv`, `recommendations.json` |
-| 10 | `spatial` | cells | core | `niches/selected.json`; skipped without coordinates; **stub** |
+| 10 | `niches` | ingest, cells | core | `selected.json`; skipped without coordinates |
 | 11 | `report` | ingest, layers | core | `report.json` (+ `report.html`) |
 
 Stages run in this order. With `--stages`, every selected stage still needs its inputs to have completed in the run directory (in this invocation or an earlier one); otherwise the run stops with a message naming the missing stage.
 
-A stage is **skipped as cached** when its directory holds a `manifest.json` with status `done`, the same configuration hash and all declared outputs present. It is **skipped as not applicable** (status `skipped`) when its predicate is false for the configuration, for example `spatial` without `dataset.spatial`. A failing stage writes a `failed` manifest with the traceback and stops the run; fix the cause and run again, and the finished stages are reused.
+A stage is **skipped as cached** when its directory holds a `manifest.json` with status `done`, the same configuration hash and all declared outputs present. It is **skipped as not applicable** (status `skipped`) when its predicate is false for the configuration, for example `niches` without `dataset.spatial`. A failing stage writes a `failed` manifest with the traceback and stops the run; fix the cause and run again, and the finished stages are reused.
 
 ## The model environment
 
@@ -59,10 +59,10 @@ interpretfm run example/toy.yaml --stages ingest
 interpretfm status example/runs/toy
 ```
 
-With `write_toy_run("example", store=True)` (a synthetic activation store and concept table) the whole pipeline except `spatial` runs on a CPU in well under a minute:
+With `write_toy_run("example", store=True)` (a synthetic activation store and concept table) the whole pipeline runs on a CPU in well under a minute:
 
 ```bash
-interpretfm run example/toy.yaml --stages ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,report
+interpretfm run example/toy.yaml
 xdg-open example/runs/toy/11_report/report.html
 ```
 

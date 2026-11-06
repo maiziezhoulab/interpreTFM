@@ -91,6 +91,10 @@ def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None) -> Dict[st
         "concept_eval": {"top_m": 20, "batch_size": 1024},
         "gene_readout": {"n_splits": 2, "controls": ["random", "coexpression", "coexpression_pc50", "celltype", "trivial"]},
         "cells": {"retain": {"min_features": 3}, "specificity": {"mhr_k": 10, "n_assoc": 10, "n_null": 5}},
+        "niches": {"radii_um": [12.0, 25.0], "k": [2, 3], "methods": ["kmeans"], "seeds": [0, 1], "min_cluster": 5,
+                   "n_pcs": 8, "n_null": 3, "label_composition": {"radius_um": 12.0, "k": 2, "n_init": 3},
+                   "seed_stability": {"k": [3]}, "concepts": {"top_k": 3, "min_cells": 5},
+                   "fixed_configs": [{"radius_um": 12.0, "space": "m", "method": "kmeans", "k": 2}]},
     }
     if concepts_csv is not None:
         params["concepts"]["offline_matrix"] = str(concepts_csv)

@@ -1,7 +1,7 @@
 # Configuration reference
 
 :::{note}
-The v1 pipeline is in development. The configuration schema below is implemented and validated; every stage but `spatial` is implemented (see [running a pipeline](running.md)).
+The v1 pipeline is in development. The configuration schema below is implemented and validated; every stage is implemented (see [running a pipeline](running.md)); the spatial stages so far cover the niches, with the interface test and the ligand–receptor screen to follow.
 :::
 
 A run is described by one YAML file with five sections. Relative paths are resolved against the directory of the file. `interpretfm validate config.yaml` checks the schema and reports every problem at once, then checks that the referenced files exist.
@@ -39,7 +39,7 @@ stages:                           # parameters per stage; any stage may be omitt
   gene_readout: {n_splits: 5, C: 1.0, scaling: [standardize, center]}
   cells: {retain: {tau: 0.15, min_valid_f1: 0.40, min_features: 10}, specificity: {min_pop: 30, mhr_k: 100, n_cells: 40000}}
   layers: {readout_scaling: standardize}
-  spatial: {}
+  niches: {radii_um: [18, 21.6, 27]}
   report: {}
 
 output:
@@ -60,7 +60,7 @@ output:
 : `layers` (non-empty list of layer names as used by the activation store). `env` selects the environment in which the model's code runs: `{conda: <name>}`, `{prefix: <env directory>}`, `{python: <interpreter>}`, or `{}` for the current interpreter. Exactly one key may be set. `{container: <image>}` is reserved for the container release and is rejected for now. One model per configuration: write one file per model and share the `dataset` section between them. `vocab` (optional) is the model's gene vocabulary (JSON object or list) used by `ingest` to report how many panel genes the model knows; without it, `<checkpoint>/vocab.json` and the stages' `token_vocab` keys are tried.
 
 `stages`
-: A mapping per stage name (`extract`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers`, `spatial`, `report`); `ingest` takes its options from `dataset`. Unknown stage names are errors; the keys inside a stage section are defined by that stage and are not checked by the schema. The keys of each stage are listed on its page: [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md), [cells](stage_cells.md), [layers](stage_layers.md); `ingest` ([page](stage_ingest.md)) takes its options from `dataset` and `model.vocab`. Paths inside a stage section (`store_root`, `offline_matrix`, `checkpoints`, `token_vocab`) are taken as absolute or relative to the configuration file; a stage that runs in the model environment reads the resolved copy in the run directory, so prefer absolute paths there.
+: A mapping per stage name (`extract`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers`, `niches`, `report`); `ingest` takes its options from `dataset`. Unknown stage names are errors; the keys inside a stage section are defined by that stage and are not checked by the schema. The keys of each stage are listed on its page: [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md), [cells](stage_cells.md), [layers](stage_layers.md), [niches](stage_niches.md); `ingest` ([page](stage_ingest.md)) takes its options from `dataset` and `model.vocab`. Paths inside a stage section (`store_root`, `offline_matrix`, `checkpoints`, `token_vocab`, `cells_h5ad`) are taken as absolute or relative to the configuration file; a stage that runs in the model environment reads the resolved copy in the run directory, so prefer absolute paths there.
 
   Every stage that reads activations accepts `store_root`, an existing activation store (the sharded 0.9 format); `stages.extract.store_root` registers such a store for the whole run without running a model.
 
