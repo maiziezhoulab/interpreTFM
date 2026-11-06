@@ -369,7 +369,16 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
         top.to_csv(ldir / "top_concepts.csv", index=False)
         concepts_info = {"top_k": top_k, "rank_by": rank_by, "active_threshold": active_thr, "min_cells": min_cells,
                          "n_tests": int(len(tests)), "n_significant_q05": int((tests["qval"] <= 0.05).sum()) if len(tests) else 0,
-                         "top": {str(n): g.sort_values("rank")["concept"].astype(str).tolist() for n, g in top.groupby("niche")}}
+                         "top": {str(n): g.sort_values("rank")["concept"].astype(str).tolist() for n, g in top.groupby("niche")},
+                         "at_fixed_configs": {}}
+        for c in fixed:
+            col = f"niche_at_{c['config']}"
+            ftests = niche_feature_tests(X, lab_table[col].to_numpy(), var, active_threshold=active_thr, min_cells=min_cells)
+            ftop = top_concepts(ftests, top_k, rank_by=rank_by)
+            ftop.to_csv(ldir / f"top_concepts_at_{c['config'].replace('/', '_')}.csv", index=False)
+            concepts_info["at_fixed_configs"][c["config"]] = {
+                "file": f"top_concepts_at_{c['config'].replace('/', '_')}.csv",
+                "top": {str(n): g.sort_values("rank")["concept"].astype(str).tolist() for n, g in ftop.groupby("niche")}}
 
         layer_summary = {"layer": layer, "cells_h5ad": str(h5), "n_cells": int(n_cells), "n_features": int(n_feat),
                          "n_cells_without_features": int((~use).sum()), "selected": chosen,

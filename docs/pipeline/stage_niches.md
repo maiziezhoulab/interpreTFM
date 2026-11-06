@@ -67,6 +67,7 @@ The manuscript's CosMx configuration (`configs/paper/cosmx_scgpt_layer2.yaml`) u
   <layer>/stability.json            median seed ARI over the finer configurations, model vs expression
   <layer>/concepts.csv              niche x feature tests (n_in, n_out, means, effect, active fractions, score, pval, qval, rank)
   <layer>/top_concepts.csv          the top_k features per niche
+  <layer>/top_concepts_at_<config>.csv   the same for the niches of each fixed configuration
 ```
 
 `report.json` carries the niche numbers beside their baselines (`niches.<layer>`: model ARI/NMI, seed ARI, purity with its tile null; expression-only winner and at the model's configuration; label composition; seed stability; top concepts).

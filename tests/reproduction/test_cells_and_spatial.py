@@ -328,9 +328,15 @@ def test_t13_niche_concept_labels(paper):
     e = SPATIAL_COSMX_SCGPT["niche_concepts"]
     rd = paper.run_dir(PRIMARY, NICHE_STAGES)
     ldir = rd / "10_niches" / exp["layer"]
-    top = pd.read_csv(ldir / "top_concepts.csv")
+    L = json.load(open(rd / "10_niches" / "selected.json"))["layers"][exp["layer"]]
+    labels = pd.read_csv(ldir / "labels.csv", dtype={"cell": str}).set_index("cell")
+    if L["selected"]["config"] == "r18um/xm/kmeans/k3":
+        top, lab = pd.read_csv(ldir / "top_concepts.csv"), labels["niche"].astype(str)
+    else:  # the sweep picked another configuration (near-tie): use the manuscript configuration's niches
+        report(f"{PRIMARY} T13 sweep winner is {L['selected']['config_native']}; using the fixed manuscript configuration", None)
+        top = pd.read_csv(ldir / "top_concepts_at_r18um_xm_kmeans_k3.csv")
+        lab = labels["niche_at_r18um/xm/kmeans/k3"].astype(str)
     assert (top.groupby("niche").size() == 25).all() and set(top["rank_by"]) == {"effect"}
-    lab = pd.read_csv(ldir / "labels.csv", dtype={"cell": str}).set_index("cell")["niche"].astype(str)
     cells = pd.read_csv(rd / "01_ingest" / "cells.csv", dtype={"cell": str}, keep_default_na=False).set_index("cell")
     ref = cells["label"].astype(str).reindex(lab.index)
     mapping, m = _jaccard_vs_geneformer(top, lab, ref)

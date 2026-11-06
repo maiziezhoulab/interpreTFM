@@ -107,6 +107,8 @@ def test_niche_stage_outputs(toy_run):
     assert len(tests) == chosen["k"] * layer["n_features"]
     top = pd.read_csv(ldir / "top_concepts.csv")
     assert (top.groupby("niche").size() <= 3).all() and (top["effect"] > 0).all()
+    ftop = pd.read_csv(ldir / "top_concepts_at_r12um_m_kmeans_k2.csv")
+    assert set(ftop["niche"]) == {0, 1} and layer["concepts"]["at_fixed_configs"]["r12um/m/kmeans/k2"]["top"]
     # the manifest records both units
     m = StageManifest.read(d)
     assert m.extra["radii_um"] == [12.0, 25.0] and m.extra["radii_native"] == [24.0, 50.0]
