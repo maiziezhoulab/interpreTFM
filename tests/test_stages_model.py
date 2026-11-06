@@ -252,3 +252,45 @@ def test_gene_table_and_token_resolver(tmp_path):
     r = TokenResolver(genes, vocab=vocab, special_tokens=["60694", "60695"])
     assert list(r.resolve(["10", 11, "60695", "KRAS", "ENSG2", "99"])) == ["ENSG1", "ENSG2", None, "ENSG3", "ENSG2", None]
     assert r.resolve_rows(["10", "60695"], {"ENSG1": 0}).tolist() == [0, -1]
+
+
+# --- parallel concept evaluation -----------------------------------------------------------------
+
+
+def _concept_eval_tables(run_dir, layer="layer_1.norm2"):
+    out = {"summary": pd.read_csv(run_dir / "06_concept_eval" / "concept_f1.csv")}
+    for d in sorted((run_dir / "06_concept_eval" / layer).glob("f1_*")):
+        for name in ("valid_concept_f1.csv", "test_concept_f1.csv", "per_concept.csv", "support.csv"):
+            out[f"{d.name}/{name}"] = pd.read_csv(d / name)
+        out[f"{d.name}/counts.json"] = json.load(open(d / "counts.json"))
+        out[f"{d.name}/split.json"] = json.load(open(d / "split.json"))
+    return out
+
+
+def test_concept_eval_n_jobs_gives_identical_results(toy_run, tmp_path):
+    """``n_jobs: 2`` (separate processes) writes exactly the tables of the sequential stage, and
+    ``n_jobs`` / ``threads_per_job`` do not enter the stage hash."""
+    import shutil
+
+    from interpretfm.runner import run_stage_inprocess
+
+    cfg, run_dir = toy_run
+    seq = _concept_eval_tables(run_dir)
+    cfg2 = load_config(run_dir / "config.resolved.yaml")
+    assert cfg2.stage_hash("concept_eval") == cfg.stage_hash("concept_eval")
+    cfg2.stages["concept_eval"] = dict(cfg2.stages["concept_eval"], n_jobs=2, threads_per_job=1)
+    assert cfg2.stage_hash("concept_eval") == cfg.stage_hash("concept_eval"), "n_jobs / threads_per_job must not change the hash"
+    rd2 = tmp_path / "parallel"
+    shutil.copytree(run_dir, rd2, symlinks=True, ignore=shutil.ignore_patterns("06_concept_eval", "07_gene_readout"))
+    cfg2.run.out_dir = rd2
+    run_stage_inprocess(cfg2, "concept_eval")
+    par = _concept_eval_tables(rd2)
+    assert set(par) == set(seq) and len(seq) > 5
+    for key in seq:
+        a, b = seq[key], par[key]
+        if isinstance(a, pd.DataFrame):
+            pd.testing.assert_frame_equal(a, b, check_exact=True)
+        else:
+            assert a == b, key
+    meta = json.load(open(rd2 / "06_concept_eval" / "concept_f1.json"))
+    assert meta["n_jobs"] == 2 and meta["threads_per_job"] == 1

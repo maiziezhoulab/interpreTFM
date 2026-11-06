@@ -405,21 +405,27 @@ class Config:
         (``uses_labels``; by default the registered stage's declaration,
         :func:`interpretfm.runner.stage_uses_labels`), so that changing the label column, file or
         groups does not invalidate extraction, TIS, SAE training or the concept evaluation.
+        Stage parameters that the stage registered as ``hash_ignore`` (``n_jobs`` and thread
+        counts of ``concept_eval``: they change how the result is computed, never the result) are
+        left out as well.
         """
         d = self.to_dict()
         if uses_labels is None:
             from interpretfm.runner import stage_uses_labels
 
             uses_labels = stage_uses_labels(stage)
+        from interpretfm.runner import stage_hash_ignore
+
         dataset = dict(d["dataset"])
         if not uses_labels:
             dataset.pop("labels", None)
+        params = {k: v for k, v in (d["stages"].get(stage, {}) or {}).items() if k not in stage_hash_ignore(stage)}
         relevant = {
             "dataset": dataset,
             "model": d["model"],
             "seed": d["run"]["seed"],
             "stage": stage,
-            "params": d["stages"].get(stage, {}),
+            "params": params,
             "output": d["output"] if stage == "report" else None,
         }
         return hash_dict(relevant)
