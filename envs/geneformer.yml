@@ -83,6 +83,7 @@ dependencies:
       - frozenlist==1.8.0
       - fsspec==2026.2.0
       # geneformer 0.1.0 is not on PyPI: install it from https://huggingface.co/ctheodoris/Geneformer
+      # (the manuscript's stores used the repository at commit 873a2fd68c515086deced7045e056cb43e70457d, 2025-08-18)
       - gprofiler-official==1.0.0
       - greenlet==3.4.0
       - grpcio==1.80.0

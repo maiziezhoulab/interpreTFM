@@ -276,9 +276,9 @@ def test_env_boundary_runs_stage_in_subprocess(tmp_path):
         run(cfg, stages=["ingest", "extract"])
     sdir = stage_dir(cfg.run.out_dir, "extract")
     m = StageManifest.read(sdir)
-    assert m.status == "failed" and "NotImplementedError" in m.error  # written by the child
+    assert m.status == "failed" and "ExtractionError" in m.error and "model.checkpoint" in m.error  # written by the child
     log = (sdir / "log.txt").read_text()
-    assert "interpretfm.cli stage extract" in log
+    assert "interpretfm.cli extract --config" in log and "--model scgpt" in log
 
 
 def test_env_boundary_missing_env_is_clear(tmp_path, monkeypatch):
@@ -297,7 +297,8 @@ def test_env_boundary_missing_env_is_clear(tmp_path, monkeypatch):
         resolve_env(cfg2.model.env)
 
     cfg3 = load_config(write_toy_run(tmp_path / "c", env={"container": "ghcr.io/x/y"}))
-    with pytest.raises(EnvError, match="containers are not supported"):
+    monkeypatch.delenv("INTERPRETFM_CONTAINER_RUNTIME", raising=False)
+    with pytest.raises(EnvError, match="no container runtime"):  # PATH holds no apptainer/docker/podman
         resolve_env(cfg3.model.env)
 
 
@@ -322,8 +323,8 @@ def test_cli_end_to_end(tmp_path):
     assert out.returncode == 0, out.stderr
     assert (tmp_path / "runs" / "toy" / "01_ingest" / "manifest.json").is_file()
     out = subprocess.run(cli + ["run", str(cfg_path), "--stages", "ingest,extract"], capture_output=True, text=True)
-    assert out.returncode == 1 and "failed in the model environment" in out.stderr
-    assert "not implemented" in (tmp_path / "runs" / "toy" / "02_extract" / "log.txt").read_text()
+    assert out.returncode == 1 and "model.checkpoint is required" in out.stderr  # env {}: in-process, no weights
+    assert "model.checkpoint is required" in (tmp_path / "runs" / "toy" / "02_extract" / "log.txt").read_text()
     out = subprocess.run(cli + ["status", str(tmp_path / "runs" / "toy")], capture_output=True, text=True)
     assert out.returncode == 0 and "failed" in out.stdout and "cached" not in out.stdout
     out = subprocess.run(cli + ["report", str(tmp_path / "runs" / "toy")], capture_output=True, text=True)

@@ -7,6 +7,8 @@
     interpretfm status run_dir/               stage status from the manifests
     interpretfm report run_dir/               (re)build the report of a run whose stages are done
     interpretfm version
+    interpretfm extract --config <yaml> [--run-dir <dir>] [--model <name>] [--layers a,b] [--env-file paths.env]
+                                              the extract stage in this interpreter (what the runner starts in model.env)
     interpretfm stage <name> --config <resolved.yaml> --run-dir <dir>   (internal: one stage, in-process)
 
 The 0.9 module entry points (``python -m interp_pipeline....``) are unchanged.
@@ -49,6 +51,13 @@ def _parser() -> argparse.ArgumentParser:
     rp.add_argument("run_dir")
 
     sub.add_parser("version", help="print the package version")
+
+    ex = sub.add_parser("extract", help="run the extract stage in this interpreter (the runner starts it in model.env)")
+    ex.add_argument("--config", required=True, help="the configuration (or a run's config.resolved.yaml)")
+    ex.add_argument("--run-dir", help="run directory (default: run.out_dir of the configuration)")
+    ex.add_argument("--model", help="expected model.name (checked against the configuration)")
+    ex.add_argument("--layers", help="expected model.layers, comma-separated (checked against the configuration)")
+    ex.add_argument("--env-file", help="KEY=VALUE file supplying ${NAME} placeholders of the configuration")
 
     st = sub.add_parser("stage", help=argparse.SUPPRESS)
     st.add_argument("name")
@@ -148,6 +157,31 @@ def cmd_stage(args) -> int:
     return 0
 
 
+def cmd_extract(args) -> int:
+    """The extract stage in this interpreter: the entry point the runner starts inside ``model.env``."""
+    try:
+        cfg = load_config(args.config, env_file=args.env_file)
+    except ConfigError as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    if args.model and args.model != cfg.model.name:
+        print(f"error: --model {args.model!r} does not match model.name {cfg.model.name!r} in {args.config}", file=sys.stderr)
+        return 2
+    if args.layers:
+        want = [s.strip() for s in args.layers.split(",") if s.strip()]
+        if want != list(cfg.model.layers):
+            print(f"error: --layers {want} do not match model.layers {cfg.model.layers} in {args.config}", file=sys.stderr)
+            return 2
+    run_dir = Path(args.run_dir) if args.run_dir else cfg.run.out_dir
+    try:
+        m = run_stage_inprocess(cfg, "extract", run_dir)
+    except StageError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(f"stage extract: {m.status}")
+    return 0
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -156,7 +190,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(__version__)
         return 0
     return {"validate": cmd_validate, "run": cmd_run, "status": cmd_status, "report": cmd_report,
-            "stage": cmd_stage}[args.command](args)
+            "stage": cmd_stage, "extract": cmd_extract}[args.command](args)
 
 
 if __name__ == "__main__":  # pragma: no cover

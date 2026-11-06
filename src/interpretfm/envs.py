@@ -7,15 +7,23 @@ environment comes from ``model.env`` in the configuration (:class:`interpretfm.c
 - ``{conda: <name>}``: ``conda run -n <name> python ...``;
 - ``{prefix: <dir>}``: ``conda run -p <dir> python ...``;
 - ``{python: <interpreter>}``: that interpreter directly (a venv, a module-loaded Python, ...);
-- nothing: the current interpreter (``sys.executable``);
-- ``{container: <image>}``: reserved for the container release; not supported yet.
+- ``{container: <image>}``: ``apptainer exec --nv <image> python ...`` (or ``singularity``,
+  ``docker run --gpus all``, ``podman run --device nvidia.com/gpu=all``) with the run directory
+  and the configured data paths bound into the container; the runtime is the first of
+  ``apptainer``, ``singularity``, ``docker``, ``podman`` on ``PATH`` or the one named by
+  ``INTERPRETFM_CONTAINER_RUNTIME``;
+- nothing: the current interpreter, in-process (one environment for everything).
 
 No interpreter path is hard-coded. ``conda`` is found through ``$CONDA_EXE`` (set by
 ``conda activate``) or on ``PATH``; set ``INTERPRETFM_CONDA`` to point at a specific binary.
 
-The child runs ``python -m interpretfm.cli stage <name> --config <resolved.yaml> --run-dir
-<dir>``, i.e. the same stage function as an in-process stage, with the run directory as its
-working context. The parent never imports model code.
+The child runs ``python -m interpretfm.cli extract --config <resolved.yaml> --run-dir <dir>
+--model <name> --layers ...`` (``interpretfm.cli stage <name> ...`` for other model stages),
+i.e. the same stage function as an in-process stage, with the run directory as its working
+context. The package must be importable there: installed in the environment, or on
+``PYTHONPATH``, which the child inherits. The parent never imports model code; it reads the
+manifests the child writes. :func:`child_environment` is what the child records in them
+(interpreter, torch and CUDA versions, every installed distribution).
 """
 from __future__ import annotations
 
@@ -25,9 +33,11 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 from interpretfm.config import ModelEnv
+
+CONTAINER_RUNTIMES = ("apptainer", "singularity", "docker", "podman")
 
 
 class EnvError(RuntimeError):
@@ -40,6 +50,19 @@ def find_conda() -> Optional[str]:
                  shutil.which("mamba")):
         if cand and Path(cand).is_file():
             return cand
+    return None
+
+
+def find_container_runtime() -> Optional[str]:
+    """The container runtime: ``INTERPRETFM_CONTAINER_RUNTIME`` (a name or a path) or the first of
+    :data:`CONTAINER_RUNTIMES` on ``PATH``; ``None`` when there is none."""
+    named = os.environ.get("INTERPRETFM_CONTAINER_RUNTIME")
+    if named:
+        return named if Path(named).is_file() else shutil.which(named)
+    for name in CONTAINER_RUNTIMES:
+        found = shutil.which(name)
+        if found:
+            return found
     return None
 
 
@@ -60,12 +83,51 @@ def conda_env_names(conda: str) -> Dict[str, str]:
     return names
 
 
-def resolve_env(env: ModelEnv) -> Dict[str, Any]:
+def _bind_paths(binds: Iterable[Any]) -> List[str]:
+    out: List[str] = []
+    for b in binds:
+        if b is None:
+            continue
+        p = Path(str(b)).expanduser()
+        if not p.exists():
+            continue
+        p = p.resolve()
+        if p.is_file():
+            p = p.parent
+        s = str(p)
+        if s != "/" and not any(s == o or s.startswith(o + "/") for o in out):
+            out = [o for o in out if not o.startswith(s + "/")] + [s]
+    return out
+
+
+def container_command(runtime: str, image: str, binds: Sequence[str] = (), cwd: Optional[str] = None) -> List[str]:
+    """The command prefix that starts ``python`` inside ``image`` with ``binds`` mounted at their own paths."""
+    name = Path(runtime).name
+    if name in ("apptainer", "singularity"):
+        cmd = [runtime, "exec", "--nv"]
+        for b in binds:
+            cmd += ["--bind", b]
+        if cwd:
+            cmd += ["--pwd", cwd]
+        return cmd + [image, "python"]
+    cmd = [runtime, "run", "--rm"]
+    cmd += ["--device", "nvidia.com/gpu=all"] if name == "podman" else ["--gpus", "all"]
+    if hasattr(os, "getuid"):
+        cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
+    for b in binds:
+        cmd += ["-v", f"{b}:{b}"]
+    if cwd:
+        cmd += ["-w", cwd]
+    return cmd + [image, "python"]
+
+
+def resolve_env(env: ModelEnv, binds: Iterable[Any] = (), cwd: Optional[Path] = None) -> Dict[str, Any]:
     """Turn ``model.env`` into a command prefix that starts the right Python.
 
     Returns ``{"kind": ..., "command": [...], "description": ...}`` where ``command`` is the
-    argument list to prepend to ``-m module ...``. Raises :class:`EnvError` with a clear
-    message when the environment does not exist.
+    argument list to prepend to ``-m module ...``. ``binds`` are host paths a container must
+    see (ignored for the other kinds). Raises :class:`EnvError` with a clear message when the
+    environment does not exist.
     """
     kind = env.kind
     if kind == "current":
@@ -78,8 +140,15 @@ def resolve_env(env: ModelEnv) -> Dict[str, Any]:
             raise EnvError(f"model.env.python: not executable: {py}")
         return {"kind": kind, "command": [str(py)], "description": f"interpreter {py}"}
     if kind == "container":
-        raise EnvError("model.env.container: containers are not supported in this version; "
-                       "use env.conda, env.prefix or env.python")
+        runtime = find_container_runtime()
+        if runtime is None:
+            raise EnvError("model.env.container: no container runtime found (none of "
+                           f"{', '.join(CONTAINER_RUNTIMES)} on PATH, INTERPRETFM_CONTAINER_RUNTIME unset); "
+                           "install one or use env.conda, env.prefix or env.python")
+        mounts = _bind_paths(list(binds) + ([cwd] if cwd else []))
+        cmd = container_command(runtime, env.container, mounts, str(Path(cwd).resolve()) if cwd else None)
+        return {"kind": kind, "command": cmd, "description": f"container {env.container} via {Path(runtime).name}",
+                "runtime": runtime, "binds": mounts}
     conda = find_conda()
     if conda is None:
         raise EnvError(f"model.env.{kind}: conda was not found (not on PATH, and neither CONDA_EXE nor "
@@ -99,16 +168,20 @@ def resolve_env(env: ModelEnv) -> Dict[str, Any]:
 
 
 def run_in_env(env: ModelEnv, module: str, args: Sequence[str], log_file: Optional[Path] = None,
-               cwd: Optional[Path] = None, check: bool = True) -> subprocess.CompletedProcess:
+               cwd: Optional[Path] = None, check: bool = True, binds: Iterable[Any] = (),
+               extra_env: Optional[Dict[str, str]] = None) -> subprocess.CompletedProcess:
     """Run ``python -m <module> <args>`` in the model environment.
 
     Output goes to ``log_file`` when given (appended), otherwise to the parent's stdout/stderr.
-    With ``check`` a non-zero exit raises :class:`EnvError` naming the log file.
+    The child inherits the environment (``PYTHONPATH``, ``CUDA_VISIBLE_DEVICES``, thread
+    limits ...) plus ``extra_env``. With ``check`` a non-zero exit raises :class:`EnvError`
+    naming the log file.
     """
-    resolved = resolve_env(env)
+    resolved = resolve_env(env, binds=binds, cwd=cwd)
     cmd: List[str] = list(resolved["command"]) + ["-m", module] + list(args)
     child_env = dict(os.environ)
     child_env.setdefault("PYTHONUNBUFFERED", "1")
+    child_env.update(extra_env or {})
     if log_file is not None:
         Path(log_file).parent.mkdir(parents=True, exist_ok=True)
         with open(log_file, "a") as fh:
@@ -123,10 +196,63 @@ def run_in_env(env: ModelEnv, module: str, args: Sequence[str], log_file: Option
     return proc
 
 
-def env_summary(env: ModelEnv) -> Dict[str, Any]:
+def env_summary(env: ModelEnv, binds: Iterable[Any] = (), cwd: Optional[Path] = None) -> Dict[str, Any]:
     """Resolution of ``env`` for the manifest, without raising (errors are recorded as text)."""
     try:
-        r = resolve_env(env)
-        return {"kind": r["kind"], "description": r["description"], "command": r["command"]}
+        r = resolve_env(env, binds=binds, cwd=cwd)
+        out = {"kind": r["kind"], "description": r["description"], "command": r["command"]}
+        if "binds" in r:
+            out["binds"] = r["binds"]
+        return out
     except EnvError as e:
         return {"kind": env.kind, "error": str(e)}
+
+
+def config_binds(cfg, run_dir: Optional[Path] = None) -> List[Any]:
+    """Host paths a container needs for a run: the run directory, the dataset, labels, weights,
+    vocabulary and the paths named in ``stages.extract``."""
+    paths: List[Any] = [run_dir or cfg.run.out_dir, cfg.dataset.h5ad, cfg.model.checkpoint, cfg.model.vocab]
+    if cfg.dataset.labels is not None:
+        paths += [cfg.dataset.labels.file, cfg.dataset.labels.groups]
+    for key in ("store_root", "cell_subset", "token_vocab"):
+        v = cfg.stage_params("extract").get(key)
+        if isinstance(v, str):
+            paths.append(v)
+    if cfg.source is not None:
+        paths.append(Path(cfg.source).parent)
+    return paths
+
+
+def installed_distributions() -> List[str]:
+    """``name==version`` of every installed distribution (what ``pip freeze`` reports), sorted."""
+    from importlib import metadata
+
+    out = set()
+    for dist in metadata.distributions():
+        name = dist.metadata["Name"] if dist.metadata else None
+        if name:
+            out.add(f"{name}=={dist.version}")
+    return sorted(out, key=str.lower)
+
+
+def child_environment() -> Dict[str, Any]:
+    """What a model-environment child records in its manifests: interpreter, platform, torch and
+    CUDA versions, the visible GPUs and every installed distribution."""
+    import platform
+    import socket
+
+    info: Dict[str, Any] = {"python": sys.version.split()[0], "executable": sys.executable, "platform": platform.platform(),
+                            "hostname": socket.gethostname(), "cuda_visible_devices": os.environ.get("CUDA_VISIBLE_DEVICES"),
+                            "packages": installed_distributions()}
+    try:
+        import torch
+
+        t: Dict[str, Any] = {"version": torch.__version__, "cuda": torch.version.cuda, "cuda_available": bool(torch.cuda.is_available())}
+        if hasattr(torch.backends, "cudnn"):
+            t["cudnn"] = torch.backends.cudnn.version()
+        if t["cuda_available"]:
+            t["devices"] = [torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())]
+        info["torch"] = t
+    except ImportError:
+        info["torch"] = None
+    return info

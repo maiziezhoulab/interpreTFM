@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+# Geneformer extraction environment: envs/geneformer.yml + the Geneformer package (not on PyPI) + this repository.
+# Build from the repository root:
+#   docker build -f containers/Dockerfile.geneformer -t interpretfm-geneformer:1.0 .
+# Build not tested locally (no container runtime on the development machine); see containers/README.md.
+ARG BASE_IMAGE=nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM ${BASE_IMAGE}
+
+ARG ENV_NAME=geneformer
+# Commit of https://huggingface.co/ctheodoris/Geneformer whose tokenizer and dictionaries wrote the manuscript's stores (2025-08-18)
+ARG GENEFORMER_COMMIT=873a2fd68c515086deced7045e056cb43e70457d
+ENV DEBIAN_FRONTEND=noninteractive \
+    CONDA_DIR=/opt/conda \
+    PATH=/opt/conda/bin:$PATH \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git git-lfs bzip2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && git lfs install --skip-repo
+
+RUN curl -fsSL https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -o /tmp/miniforge.sh \
+    && bash /tmp/miniforge.sh -b -p ${CONDA_DIR} \
+    && rm /tmp/miniforge.sh \
+    && conda clean -afy
+
+WORKDIR /opt/interpretfm
+COPY envs/${ENV_NAME}.yml envs/
+RUN conda env create -f envs/${ENV_NAME}.yml && conda clean -afy
+
+# The Geneformer package: the code and its gene dictionaries only (the model weights stay outside the image;
+# point model.checkpoint at a model folder on the host, e.g. the top level of a full clone).
+RUN GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/ctheodoris/Geneformer /opt/Geneformer \
+    && cd /opt/Geneformer \
+    && git checkout ${GENEFORMER_COMMIT} \
+    && git lfs pull --include="geneformer/*.pkl,geneformer/gene_dictionaries_30m/*.pkl" \
+    && conda run -n ${ENV_NAME} python -m pip install --no-deps /opt/Geneformer \
+    && rm -rf /opt/Geneformer/.git
+
+COPY . .
+RUN conda run -n ${ENV_NAME} python -m pip install --no-deps -e . \
+    && conda run -n ${ENV_NAME} python -c "import geneformer, interpretfm; print(geneformer.TOKEN_DICTIONARY_FILE)"
+
+ENV PATH=/opt/conda/envs/${ENV_NAME}/bin:$PATH
+ENTRYPOINT []
+CMD ["python", "-m", "interpretfm.cli", "--help"]
