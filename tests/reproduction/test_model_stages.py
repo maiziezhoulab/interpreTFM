@@ -272,7 +272,7 @@ def test_t5_gene_readout(paper, name):
     """Gene-level readout (Table S3): probe AUROC of the raw state and the sparse SAE against the
     expression and random controls, with the published ordering."""
     exp = EXPECTED[name]
-    rd = paper.run_dir(name)
+    rd = paper.run_dir(name, stages=["ingest", "extract", "sae", "concepts", "gene_readout"])
     out = json.load(open(rd / "07_gene_readout" / "gene_readout.json"))
     reps = out["representations"]
     assert out["params"]["n_splits"] == 5 and out["params"]["C"] == 1.0
