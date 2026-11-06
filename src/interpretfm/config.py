@@ -192,6 +192,27 @@ class Labels:
         return self.groups is not None or bool(self.group_map)
 
 
+def parse_labels(raw: Any, base: Path, where: str, errors: List[str]) -> Optional[Labels]:
+    """A :class:`Labels` from a configuration mapping (``dataset.labels``, or a stage's ``labels``
+    override with the same keys: ``column``, ``file``, ``file_column``, ``groups``,
+    ``group_map``); relative paths resolve against ``base``. Problems are appended to
+    ``errors`` and give ``None``."""
+    lab = _require_mapping(raw, where, errors)
+    _unknown_keys(lab, {"column", "groups", "group_map", "file", "file_column"}, where, errors)
+    col = _get_str(lab, "column", where, errors, required=True)
+    groups = _get_str(lab, "groups", where, errors)
+    gmap = _require_mapping(lab.get("group_map"), where + ".group_map", errors)
+    if any(not isinstance(k, str) or not isinstance(v, str) for k, v in gmap.items()):
+        errors.append(f"{where}.group_map: expected a mapping of label strings to group strings")
+        gmap = {}
+    lfile = _get_str(lab, "file", where, errors)
+    fcol = _get_str(lab, "file_column", where, errors, default="label") or "label"
+    if not col:
+        return None
+    return Labels(column=col, groups=_resolve(base, groups) if groups else None, group_map={str(k): str(v) for k, v in gmap.items()},
+                  file=_resolve(base, lfile) if lfile else None, file_column=fcol)
+
+
 @dataclass
 class Spatial:
     """Spatial coordinates and their unit.
@@ -242,21 +263,7 @@ class DatasetSection:
         if gene_id.kind not in ("symbol", "ensembl"):
             errors.append(f"{where}.gene_id.kind: expected 'symbol' or 'ensembl', got {gene_id.kind!r}")
 
-        labels = None
-        if raw.get("labels") is not None:
-            lab = _require_mapping(raw.get("labels"), where + ".labels", errors)
-            _unknown_keys(lab, {"column", "groups", "group_map", "file", "file_column"}, where + ".labels", errors)
-            col = _get_str(lab, "column", where + ".labels", errors, required=True)
-            groups = _get_str(lab, "groups", where + ".labels", errors)
-            gmap = _require_mapping(lab.get("group_map"), where + ".labels.group_map", errors)
-            if any(not isinstance(k, str) or not isinstance(v, str) for k, v in gmap.items()):
-                errors.append(f"{where}.labels.group_map: expected a mapping of label strings to group strings")
-                gmap = {}
-            lfile = _get_str(lab, "file", where + ".labels", errors)
-            fcol = _get_str(lab, "file_column", where + ".labels", errors, default="label") or "label"
-            if col:
-                labels = Labels(column=col, groups=_resolve(base, groups) if groups else None, group_map={str(k): str(v) for k, v in gmap.items()},
-                                file=_resolve(base, lfile) if lfile else None, file_column=fcol)
+        labels = parse_labels(raw.get("labels"), base, where + ".labels", errors) if raw.get("labels") is not None else None
 
         spatial = None
         if "spatial" in raw and raw["spatial"] is not None:
@@ -405,21 +412,27 @@ class Config:
         (``uses_labels``; by default the registered stage's declaration,
         :func:`interpretfm.runner.stage_uses_labels`), so that changing the label column, file or
         groups does not invalidate extraction, TIS, SAE training or the concept evaluation.
+        Stage parameters that the stage registered as ``hash_ignore`` (``n_jobs`` and thread
+        counts of ``concept_eval``: they change how the result is computed, never the result) are
+        left out as well.
         """
         d = self.to_dict()
         if uses_labels is None:
             from interpretfm.runner import stage_uses_labels
 
             uses_labels = stage_uses_labels(stage)
+        from interpretfm.runner import stage_hash_ignore
+
         dataset = dict(d["dataset"])
         if not uses_labels:
             dataset.pop("labels", None)
+        params = {k: v for k, v in (d["stages"].get(stage, {}) or {}).items() if k not in stage_hash_ignore(stage)}
         relevant = {
             "dataset": dataset,
             "model": d["model"],
             "seed": d["run"]["seed"],
             "stage": stage,
-            "params": d["stages"].get(stage, {}),
+            "params": params,
             "output": d["output"] if stage == "report" else None,
         }
         return hash_dict(relevant)

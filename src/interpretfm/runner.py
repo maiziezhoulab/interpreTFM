@@ -63,6 +63,7 @@ class Stage:
     order: int = 99
     doc: str = ""
     uses_labels: bool = False  #: whether the stage reads ``dataset.labels`` (then a label change invalidates its cache)
+    hash_ignore: List[str] = field(default_factory=list)  #: stage parameters that cannot change the result (left out of the hash)
 
     def runs_in_model_env(self, cfg: Config) -> bool:
         """Whether the runner starts this stage in ``model.env`` for ``cfg`` (a model stage with an
@@ -83,6 +84,7 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
                    applies: Optional[Callable[[Config], bool]] = None, order: Optional[int] = None,
                    replace: bool = False, uses_labels: bool = False,
                    needs_model_env: Optional[Callable[[Config], bool]] = None,
+                   hash_ignore: Sequence[str] = (),
                    ) -> Callable[[StageFunc], StageFunc]:
     """Decorator registering ``func`` as the implementation of stage ``name``.
 
@@ -95,6 +97,8 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
     ``env="model"`` stages run in ``model.env`` through :mod:`interpretfm.envs`;
     ``needs_model_env(cfg)`` can return False to keep a particular configuration in-process
     (``extract`` with a cached store), and ``model.env: {}`` always runs in-process.
+    ``hash_ignore`` names stage parameters that only change how the stage computes, never what
+    (``n_jobs``, thread counts): they are left out of the stage's configuration hash.
     """
     if env not in ("core", "model"):
         raise ValueError(f"stage {name!r}: env must be 'core' or 'model', got {env!r}")
@@ -106,7 +110,7 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
         _REGISTRY[name] = Stage(name=name, func=func, inputs=list(inputs), outputs=list(outputs), env=env,
                                 applies=applies, needs_model_env=needs_model_env, order=pos,
                                 doc=(func.__doc__ or "").strip().splitlines()[0] if func.__doc__ else "",
-                                uses_labels=bool(uses_labels))
+                                uses_labels=bool(uses_labels), hash_ignore=[str(k) for k in hash_ignore])
         return func
 
     return deco
@@ -132,6 +136,14 @@ def list_stages() -> List[Stage]:
 def _ensure_builtin_stages() -> None:
     # Importing the package registers the built-in stages; done lazily to avoid an import cycle.
     import interpretfm.stages  # noqa: F401
+
+
+def stage_hash_ignore(name: str) -> List[str]:
+    """Parameters of a registered stage that are left out of its configuration hash (empty for
+    names that are not registered)."""
+    _ensure_builtin_stages()
+    st = _REGISTRY.get(name)
+    return [] if st is None else list(st.hash_ignore)
 
 
 def stage_uses_labels(name: str) -> bool:

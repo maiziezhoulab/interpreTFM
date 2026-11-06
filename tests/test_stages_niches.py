@@ -273,3 +273,68 @@ def test_niche_concept_labels_and_cross_model_jaccard():
     assert s["n_matched"] == 3 and all(j > 0 for j in s["matched_jaccard"]) and s["matched_mean_jaccard"] >= s["unmatched_mean_jaccard"]
     same = cross_model_jaccard(top, top)
     assert same[same["matched"]]["jaccard"].tolist() == [1.0, 1.0, 1.0]
+
+
+# --- per-stage label override -------------------------------------------------------------------------
+
+
+def test_stage_label_override(toy_run, tmp_path):
+    """``stages.<niches|interfaces|lr_screen>.labels`` (the keys of ``dataset.labels``) replaces the
+    dataset labels for that stage only: the niche stage reports the override's name, its ARI
+    changes with the labels, the override enters the stage hash, and the label-free stages keep theirs."""
+    import copy
+    import shutil
+
+    import anndata as ad
+
+    from interpretfm.ingest import dataset_labels, stage_labels
+    from interpretfm.runner import run_stage_inprocess
+
+    cfg = toy_run
+    rd = cfg.run.out_dir
+    a = ad.read_h5ad(cfg.dataset.h5ad, backed="r")
+    rng = np.random.default_rng(3)
+    names = [str(o) for o in a.obs_names]
+    other = pd.DataFrame({"cell_id": names, "shuffled": rng.permutation(a.obs["cell_type"].astype(str).to_numpy())}).set_index("cell_id")
+    a.file.close()
+    csv = tmp_path / "other_labels.csv"
+    other.to_csv(csv)
+    assert stage_labels(cfg, cfg.stage_params("niches"), "niches") is cfg.dataset.labels
+    cfg2 = copy.deepcopy(cfg)
+    cfg2.stages["niches"] = dict(cfg2.stages.get("niches", {}), labels={"column": "shuffled", "file": str(csv), "file_column": "shuffled"})
+    lab = stage_labels(cfg2, cfg2.stage_params("niches"), "niches")
+    assert lab.column == "shuffled" and lab.file == csv and lab is not cfg2.dataset.labels
+    assert cfg2.stage_hash("niches") != cfg.stage_hash("niches") and cfg2.stage_hash("cells") == cfg.stage_hash("cells")
+    values = dataset_labels(lab, ad.read_h5ad(cfg.dataset.h5ad))
+    assert list(values) == other["shuffled"].tolist()
+    rd2 = tmp_path / "override"
+    shutil.copytree(rd, rd2, symlinks=True, ignore=shutil.ignore_patterns("10_niches", "11_interfaces", "12_lr_screen", "13_report"))
+    cfg2.run.out_dir = rd2
+    run_stage_inprocess(cfg2, "niches")
+    layer = cfg.model.layers[0]
+    v1 = json.load(open(stage_dir(rd, "niches") / layer / "validation.json"))
+    v2 = json.load(open(rd2 / stage_dir(rd, "niches").name / layer / "validation.json"))
+    assert v1["reference_labels"] == "cell_type" and v2["reference_labels"] == "shuffled"
+    assert v1["selected"] == v2["selected"] and abs(v1["ari"] - v2["ari"]) > 1e-6
+    bad = copy.deepcopy(cfg)
+    bad.stages["niches"] = dict(bad.stages.get("niches", {}), labels={"file": str(csv)})
+    with pytest.raises(Exception, match="column"):
+        stage_labels(bad, bad.stage_params("niches"), "niches")
+
+
+def test_cross_model_recipe_on_a_run(toy_run):
+    """`read_niche_run` reads a run's niche labels and top concepts; `cross_model_concepts` on the same run twice
+    gives the identity matching and Jaccard 1 for every matched niche."""
+    from interpretfm.niche_concepts import cross_model_concepts, read_niche_run
+
+    cfg = toy_run
+    layer = cfg.model.layers[0]
+    top, lab = read_niche_run(cfg.run.out_dir, layer)
+    assert set(top.columns) >= {"niche", "concept", "rank"} and lab.index.name == "cell" and len(lab) > 0
+    cells = pd.read_csv(stage_dir(cfg.run.out_dir, "niches").parent / "01_ingest" / "cells.csv", dtype={"cell": str}).set_index("cell")
+    table = cross_model_concepts({"a": (top, lab), "b": (top, lab)}, cells["label"].astype(str))
+    assert len(table) == 1 and table.iloc[0]["model_a"] == "a" and table.iloc[0]["n_cells"] == len(lab)
+    assert all(abs(j - 1.0) < 1e-12 for j in table.iloc[0]["jaccard"]) and table.iloc[0]["matched_mean_jaccard"] == pytest.approx(1.0)
+    assert all(f"{n}->{n}" in table.iloc[0]["matching"] for n in lab.unique())
+    with pytest.raises(KeyError, match="no column"):
+        read_niche_run(cfg.run.out_dir, layer, "r1um/m/kmeans/k9")

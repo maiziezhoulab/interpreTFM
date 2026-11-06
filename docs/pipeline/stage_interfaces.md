@@ -6,7 +6,7 @@ Directory `11_interfaces/`. Inputs: `ingest`, `extract` (the activation store, f
 
 For every projected layer, on the cells that have a feature profile (`has_row`):
 
-1. **Labels.** The exact labels of `dataset.labels` are normalised (lower case; spaces, slashes and hyphens become `_`; `labels.normalize: false` keeps them verbatim) and mapped to groups with `dataset.labels.groups` (a CSV with columns `label`/`cell_type` and `group`) or `dataset.labels.group_map` (inline); a label without a group is its own group. Pairs are tested between **groups**; the permutation strata use the **exact** labels. Groups listed in `exclude_groups` (default `low_quality`, `unresolved`) are dropped from the pairs.
+1. **Labels.** The exact labels of `dataset.labels` (or of the stage's own `labels` set) are normalised (lower case; spaces, slashes and hyphens become `_`; `labels.normalize: false` keeps them verbatim) and mapped to groups with `dataset.labels.groups` (a CSV with columns `label`/`cell_type` and `group`) or `dataset.labels.group_map` (inline); a label without a group is its own group. Pairs are tested between **groups**; the permutation strata use the **exact** labels. Groups listed in `exclude_groups` (default `low_quality`, `unresolved`) are dropped from the pairs.
 2. **Covariates** from the dataset: log1p total counts, log1p detected genes and log1p cell area (`covariates.area`: `{column: <obs column>}`, or `{product: [<a>, <b>]}` for a bounding box; without it the score is adjusted on counts and genes only, and the summary records which covariates were used).
 3. **Program score.** `P` is the mean over features of the positive part of the feature z-scores, each feature clipped at its `clip_quantile` (0.995) quantile. `P_adj` residualises `P` on the covariates (with an intercept) within each exact label.
 4. **Pairs and statistic.** Edges join cells closer than `edge_radius_um`. For every unordered pair of groups, within each niche (the calibrated test) or over the whole section (the niche-free test), the statistic is the mean over the pair's edges of the two cells' scores; pairs with fewer than `min_edges` (50) edges are not tested.
@@ -40,7 +40,7 @@ Every length is given in µm and converted once to the dataset's coordinate unit
 | `exclude_groups` | `[low_quality, unresolved]` | groups dropped from the pairs |
 | `signal_fractions` | `[0.02, 0.05, 0.1, 0.2, 0.35, 0.5, 0.7, 0.85, 1.0]` | candidate signal fractions of the matched fields |
 | `seeds` | the reference seeds (`interpretfm.interfaces.DEFAULT_SEEDS`) | `calibration` (fields), `noise`, `calib_legacy_rep` / `calib_niche_rep` / `calib_free_rep` (+ replicate), `calib_noise`, `legacy`, `legacy_adjusted`, `niche`, `free`, `legacy_free` |
-| `labels` | `{normalize: true}` | |
+| `labels` | `{normalize: true}` | `normalize`, plus an optional label set for this stage with the keys of `dataset.labels` (`column`, `file`, `file_column`, `groups`, `group_map`) used instead of the dataset labels (the manuscript's Xenium interface test uses marker-derived labels from a per-cell CSV, exact label = group, while its cell-level numbers use the dataset's `cell_type` column) |
 | `covariates` | `{}` | `area: {column: <obs column>}` or `{product: [<a>, <b>]}` |
 | `niche` | `{column: niche}` | the niche partition: a column of `10_niches/<layer>/labels.csv` (`niche` = the sweep winner, `niche_at_<config>` = a fixed configuration), or `{config: <label>}` |
 | `niche_labels` | `{}` | `{<layer>: csv}` with columns `cell, <niche column>` instead of the `niches` stage's labels |

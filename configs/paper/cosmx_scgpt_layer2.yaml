@@ -92,6 +92,7 @@ stages:
     top_m: 200
     batch_size: 8192
     device: cpu
+    n_jobs: 6              # the six evaluations in separate processes (wall time only; not part of the stage hash)
     token_vocab: ${INTERPRETFM_MODELS}/scGPT/whole-human-pretrain/vocab.json
 
   # Gene-level readout: five whole-gene splits (10 % test genes), L2 logistic probe with C = 1

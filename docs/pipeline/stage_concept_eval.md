@@ -37,6 +37,10 @@ Per concept and threshold the `top_m` units by validation F1 are kept and scored
 | `token_vocab` | null | JSON vocabulary when the store holds token numbers |
 | `checkpoints` | `{}` | `{<layer>: path}`: SAE checkpoints to score instead of the selected ones |
 | `store_root` | null | a cached activation store |
+| `n_jobs` | 1 | evaluations (unit × representation) run at a time; above 1 each runs in its own spawned process through the same function as the sequential path, so the tables are identical and only the wall time changes (the paper configurations use 6) |
+| `threads_per_job` | null | torch threads of every evaluation process (default: torch's own default, which follows `OMP_NUM_THREADS`) |
+
+`n_jobs` and `threads_per_job` are left out of the stage's configuration hash (`hash_ignore` at registration): they cannot change a result, so a cached stage stays valid when they change. Six evaluations of a 952-shard store take about 17 h one after the other and about 3 h with `n_jobs: 6` on a CPU node; memory is about 3–7 GB per process.
 
 ## Outputs
 

@@ -28,6 +28,7 @@ Radii are given in micrometres (`radii_um`, `label_composition.radius_um`) and c
 
 | key | default | meaning |
 |---|---|---|
+| `labels` | `dataset.labels` | a label set for this stage with the keys of `dataset.labels` (`column`, `file`, `file_column`), used for the ARI/NMI, the label-composition baseline and the niche matching instead of the dataset labels (the manuscript's Xenium niches are compared with marker-derived labels from a per-cell CSV while its cell-level numbers use the dataset's `cell_type` column) |
 | `radii_um` | required | neighbourhood radii in µm |
 | `k` | `[3, 4, 5]` | numbers of clusters |
 | `methods` | `[kmeans, gmm]` | k-means (one initialisation per seed) and full-covariance GMM |
@@ -72,22 +73,20 @@ The manuscript's CosMx configuration (`configs/paper/cosmx_scgpt_layer2.yaml`) u
 
 `report.json` carries the niche numbers beside their baselines (`niches.<layer>`: model ARI/NMI, seed ARI, purity with its tile null; expression-only winner and at the model's configuration; label composition; seed stability; top concepts).
 
-## Cross-model concept agreement (two runs)
+## Cross-model concept agreement (several runs)
+
+The manuscript compares the top-25 concept labels of the niche-defining features between models (Supplementary Note S1): niches of two runs are matched by label composition on the cells both runs labelled (Hungarian assignment minimising the maximum absolute difference of label fractions), and the Jaccard index of the top-concept sets is reported for matched and unmatched niche pairs. `cross_model_concepts` does this for every pair of finished runs (one row per pair: the matching, the shared labels and Jaccard of every matched niche, the matched and unmatched means):
 
 ```python
 import pandas as pd
-from interpretfm.niche_concepts import cross_model_jaccard, match_niches, niche_composition, summarize_jaccard
-a, b = "<run of model A>/10_niches/<layer>", "<run of model B>/10_niches/<layer>"
-ta, tb = pd.read_csv(f"{a}/top_concepts.csv"), pd.read_csv(f"{b}/top_concepts.csv")
-la = pd.read_csv(f"{a}/labels.csv", index_col="cell")["niche"]
-lb = pd.read_csv(f"{b}/labels.csv", index_col="cell")["niche"].reindex(la.index)
-ref = pd.read_csv("<run of model A>/01_ingest/cells.csv", index_col="cell")["label"].reindex(la.index)
-ok = la.notna() & lb.notna()
-mapping, cost = match_niches(niche_composition(la[ok], ref[ok]), niche_composition(lb[ok], ref[ok]))
-pairs = cross_model_jaccard(ta, tb, mapping)   # every niche pair; `matched` marks the composition matching
-summarize_jaccard(pairs)                       # mean Jaccard over matched and unmatched pairs
+from interpretfm.niche_concepts import cross_model_concepts, read_niche_run
+runs = {"scgpt": read_niche_run("<run of scGPT>", "layer_1.norm2", "r18um/xm/kmeans/k3"),      # a fixed configuration
+        "geneformer": read_niche_run("<run of Geneformer>", "layer_1", "r21.6um/m/kmeans/k3"),
+        "c2s_scale": read_niche_run("<run of C2S-Scale>", "layer_13")}                         # or the sweep winner
+ref = pd.read_csv("<any of the runs>/01_ingest/cells.csv", index_col="cell")["label"]          # or the stage's label set
+table = cross_model_concepts(runs, ref)
 ```
 
-Niches are matched by the Hungarian assignment that minimises the maximum absolute difference of label composition (the manuscript's rule); without labels pass an explicit `mapping` or none (equal niche ids).
+`read_niche_run` returns the top-concept table and the cell-indexed niche labels of a run's `niches` stage (the sweep winner, or `niche_at_<config>` / `top_concepts_at_<config>.csv` of a fixed configuration). The reference labels must be the ones the niche compositions should be matched on (for the Xenium paper runs the marker labels of `stages.niches.labels`). The two-run building blocks remain available (`niche_composition`, `match_niches`, `cross_model_jaccard`, `summarize_jaccard`); without labels pass an explicit `matching` to `cross_model_jaccard` or none (equal niche ids). The reproduction tests run the recipe on the three CosMx and the three Xenium paper runs (`tests/reproduction/test_other_layers.py`).
 
-Python: `interpretfm.niches` (`NicheGrid`, `niche_sweep`, `select_config`, `cluster_niches`, `niche_validation`, `expression_svd`, `expression_variant`, `label_composition`, `seed_stability`) and `interpretfm.niche_concepts` (`niche_feature_tests`, `top_concepts`, `niche_composition`, `match_niches`, `cross_model_jaccard`).
+Python: `interpretfm.niches` (`NicheGrid`, `niche_sweep`, `select_config`, `cluster_niches`, `niche_validation`, `expression_svd`, `expression_variant`, `label_composition`, `seed_stability`) and `interpretfm.niche_concepts` (`niche_feature_tests`, `top_concepts`, `niche_composition`, `match_niches`, `cross_model_jaccard`, `read_niche_run`, `cross_model_concepts`).

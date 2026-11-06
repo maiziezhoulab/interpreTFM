@@ -87,7 +87,7 @@ def test_lr_screen_stage_outputs(toy_run):
     assert s["params"]["thresholds"] == [1, 2] and s["params"]["n_perm"] == 20 and s["params"]["seed"] == 0 and s["params"]["min_positive"] == 10
     assert s["database"]["packaged"] is False and s["database"]["n_rows"] == 8 and s["database"]["n_complexes"] == 1
     assert s["n_pairs_on_panel"] == 7 and s["n_cells"] == 300 and s["n_edges"] > 0 and s["mean_other_cells"] == pytest.approx(2 * s["n_edges"] / 300)
-    assert s["labels"] == {"column": "cell_type", "n": 3} and s["niche_column"] == "niche"
+    assert s["labels"] == {"column": "cell_type", "file": None, "n": 3} and s["niche_column"] == "niche"
     assert set(s["summary"]["thresholds"]) == {"1", "2"} and all(v["n_tested"] <= 7 for v in s["summary"]["thresholds"].values())
     pairs = pd.read_csv(d / "pairs.csv")
     assert len(pairs) == 7 and "NOTONPANEL" not in set(pairs["ligand"]) and (pairs["receptor"] == "RC").sum() == 1

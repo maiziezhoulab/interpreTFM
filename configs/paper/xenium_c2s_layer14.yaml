@@ -75,6 +75,7 @@ stages:
     top_m: 200
     batch_size: 8192
     device: cpu
+    n_jobs: 6              # the six evaluations in separate processes (wall time only; not part of the stage hash)
 
   gene_readout:
     n_splits: 5
@@ -91,9 +92,9 @@ stages:
     device: cpu
 
   # Cell level: retention (validation F1 >= 0.40 at tau 0.15, concepts with 5-100 panel genes),
-  # projection to cells, GSI excess / MHR@100 on every stored cell (n_cells above the dataset size
-  # reads all shards; the manuscript run read 75,745 cells), populations >= 30 cells, 5 label
-  # shuffles, seed 0.
+  # projection to cells, GSI excess / MHR@100 on a sample of stored cells, populations >= 30 cells, 5 label
+  # shuffles, seed 0. The manuscript's Xenium evaluation read the evenly spaced shards holding about
+  # 100,000 cells (TACCO cell_type populations).
   cells:
     retain: {tau: 0.15, min_valid_f1: 0.40, concept_size: [5, 100], min_features: 10, unit: row}
     projection: {dedup_cells: true, batch_size: 8192}
@@ -102,8 +103,11 @@ stages:
     device: cpu
 
   # Niches: radii 100 / 120 / 150 um (Xenium coordinates are in um), otherwise the CosMx grid and
-  # score; label composition at the manuscript's 100 um / k = 3.
+  # score; label composition at the manuscript's 100 um / k = 5.
   niches:
+    # The manuscript compares the Xenium niches with the marker-derived labels (per-cell CSV, 14 labels incl.
+    # low_quality); the dataset's cell_type column (TACCO) stays the label set of the cell-level stages.
+    labels: {column: marker_label, file: "${INTERPRETFM_DATA}/xenium_marker_labels.csv.gz", file_column: label}
     radii_um: [100.0, 120.0, 150.0]
     k: [3, 4, 5]
     methods: [kmeans, gmm]
@@ -118,18 +122,20 @@ stages:
     score: {ari: 1.5, purity_z: 0.1, sep: 1.0, purity_z_clip: 10.0}
     baselines: [expression_svd50, label_composition]
     expression: {n_components: 50, seed: 0}
-    label_composition: {radius_um: 100.0, k: 3, n_pcs: 15, n_init: 20, seed: 0}
+    label_composition: {radius_um: 100.0, k: 5, n_pcs: 15, n_init: 20, seed: 0}   # the manuscript's baseline at five niches
     expression_variants: {enabled: false, seeds: [0, 1, 2]}
     seed_stability: {k: [4, 5]}
     concepts: {top_k: 25, active_threshold: 0.0, min_cells: 20, rank_by: effect}
-    fixed_configs: [{radius_um: 150.0, space: m, method: gmm, k: 3}]   # the manuscript's selected configuration, validated whatever the sweep picks
+    # The manuscript's Xenium niches are the five-niche partitions (readthrough P1, Supplementary Note S1): the k = 5
+    # configuration of this model, validated whatever the sweep picks; the earlier three-niche configuration follows.
+    fixed_configs: [{radius_um: 100.0, space: xm, method: kmeans, k: 5}, {radius_um: 150.0, space: m, method: gmm, k: 3}]
 
-  # Interfaces (P3-C completes the Xenium label scheme: the manuscript tested marker-derived labels read from a
-  # per-cell CSV, dataset.labels.file, with the cell-type group map; the values below are the paper's):
-  # edge radius and stratum block 120 um, legacy tile 400 um, smooth-field length scales 60 / 150 / 400 um;
-  # covariates: log counts, log genes, log cell_area. The manuscript's fired-on genes read shards until
-  # 700,000 gene-token rows (max_shards here is a placeholder for P3-C).
+  # Interfaces: the manuscript tested the marker-derived labels (per-cell CSV; exact label = group, no group map;
+  # low_quality excluded) on the five-niche partition: edge radius and stratum block 120 um, legacy tile 400 um,
+  # smooth-field length scales 60 / 150 / 400 um; covariates: log counts, log genes, log cell_area. The
+  # manuscript's fired-on genes read shards until 700,000 gene-token rows (3 shards of this store).
   interfaces:
+    labels: {normalize: true, column: marker_label, file: "${INTERPRETFM_DATA}/xenium_marker_labels.csv.gz", file_column: label}
     edge_radius_um: 120.0
     block_um: 120.0
     legacy_tile_um: 400.0
@@ -142,15 +148,15 @@ stages:
     clip_quantile: 0.995
     exclude_groups: [low_quality, unresolved]
     covariates: {area: {column: cell_area}}
-    niche: {config: "r150um/m/gmm/k3"}
+    niche: {config: "r100um/xm/kmeans/k5"}
     markers: {enabled: true, top_n: 10}
-    fired_on: {enabled: true, max_shards: 4, threshold: 0.15, rate: 0.2, mass: 0.8}
+    fired_on: {enabled: true, max_shards: 3, threshold: 0.15, rate: 0.2, mass: 0.8}
 
   # Ligand–receptor co-localization screen (model-free): the manuscript's parameters for Xenium, radius 100 um, seed 11,
   # grid 0.1 um for a matched radius (`match_neighbors_to: 7.20`, the CosMx section's count at 100 px, gives 15.4 um).
-  # The manuscript's Xenium screen permuted within the marker-derived labels (dataset.labels.file, P3-C); with the author
-  # labels here the null differs, so the Xenium hit set is reproduced only once the label file is configured.
+  # The manuscript's Xenium screen permuted within the marker-derived labels (the same per-cell CSV as above).
   lr_screen:
+    labels: {column: marker_label, file: "${INTERPRETFM_DATA}/xenium_marker_labels.csv.gz", file_column: label}
     radius_um: 100.0
     thresholds: [1, 3]
     n_perm: 100
@@ -160,7 +166,7 @@ stages:
     fold_min: 1.2
     match_grid_step: 0.1
     match_round_decimals: 1
-    niche: {config: "r150um/m/gmm/k3"}
+    niche: {config: "r100um/xm/kmeans/k5"}
 
 output:
   html: true

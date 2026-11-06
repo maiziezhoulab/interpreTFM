@@ -31,7 +31,10 @@ label_composition]), ``expression`` ({n_components: 50, seed: 0}), ``label_compo
 ({radius_um: <first radius>, k: <first k>, n_pcs: 15, n_init: 20, seed: 0}),
 ``expression_variants`` ({enabled: false, seeds: [0, 1, 2]}), ``seed_stability`` ({k: [4, 5]}),
 ``concepts`` ({top_k: 25, active_threshold: 0.0, min_cells: 20, rank_by: effect}),
-``fixed_configs`` ([{radius_um, space, method, k}]: configurations validated besides the winner, for
+``labels`` (a label set for this stage with the keys of ``dataset.labels`` — ``column``, ``file``,
+``file_column`` — used instead of ``dataset.labels`` for the ARI/NMI and the label-composition
+baseline; the manuscript's Xenium niches are compared with marker-derived labels from a per-cell
+CSV), ``fixed_configs`` ([{radius_um, space, method, k}]: configurations validated besides the winner, for
 example a published one), ``cells_h5ad`` ({<layer>: path}: projected features to use instead of the
 ``cells`` stage's).
 
@@ -49,7 +52,7 @@ from typing import Any, Dict, Optional
 import numpy as np
 import pandas as pd
 
-from interpretfm.ingest import dataset_labels
+from interpretfm.ingest import dataset_labels, stage_labels
 from interpretfm.niche_concepts import niche_feature_tests, top_concepts
 from interpretfm.niches import (
     EXPRESSION_VARIANTS,
@@ -216,8 +219,10 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
         raise KeyError(f"dataset.spatial.obsm: '{sp.obsm}' not in adata.obsm")
     coords_all = np.asarray(adata.obsm[sp.obsm], dtype=np.float64)[:, :2]
     obs_names = pd.Index([str(o) for o in adata.obs_names])
-    labels_all = dataset_labels(cfg.dataset, adata)
+    label_set = stage_labels(cfg, p, "niches")
+    labels_all = dataset_labels(label_set, adata)
     has_labels = labels_all is not None
+    label_name = label_set.column if has_labels else None
     cells_dir = ctx.input_dir("cells") if not overrides else None
 
     grid_info = grid.to_dict(upu)
@@ -263,7 +268,7 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
         ctx.log.info("niches: %s: selected %s (score %.3f, rank %d/%d): seed ARI %.3f, purity %.3f (null %.3f, z %.1f)%s", layer,
                      chosen["config_native"], chosen["score"], chosen["rank"], chosen["n_configs"], chosen["seed_ari"],
                      val["purity"], val["purity_null_mean"], val["purity_z"],
-                     f", ARI {val['ari']:.3f} / NMI {val['nmi']:.3f} vs {cfg.dataset.labels.column}" if has_labels else "")
+                     f", ARI {val['ari']:.3f} / NMI {val['nmi']:.3f} vs {label_name}" if has_labels else "")
         lab_table = pd.DataFrame({"cell": cells, "niche": lab})
         at_fixed: Dict[str, Any] = {}
         for c in fixed:
@@ -281,7 +286,7 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
                          f", ARI {fval['ari']:.3f} / NMI {fval['nmi']:.3f}" if has_labels else "")
         lab_table.to_csv(ldir / "labels.csv", index=False)
         ctx.write_json(f"{layer}/validation.json", {"layer": layer, "selected": chosen, "sweep_row": _row_dict(sel), **val,
-                                                    "reference_labels": cfg.dataset.labels.column if has_labels else None,
+                                                    "reference_labels": label_name,
                                                     "n_cells_without_features": int((~use).sum()), "fixed_configs": at_fixed})
 
         # 3. baselines
@@ -321,7 +326,7 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
                 base["label_composition"] = {"skipped": "no dataset.labels"}
             else:
                 lc_r = radius_to_native(lc_radius_um, upu)
-                out_lc: Dict[str, Any] = {"params": {"n_pcs": lc_pcs, "n_init": lc_init, "seed": lc_seed, "labels": cfg.dataset.labels.column}}
+                out_lc: Dict[str, Any] = {"params": {"n_pcs": lc_pcs, "n_init": lc_init, "seed": lc_seed, "labels": label_name}}
                 for tag, r_um, r_nat, kk in (("published", lc_radius_um, lc_r, lc_k),
                                              ("at_model_config", chosen["radius_um"], chosen["radius_native"], chosen["k"])):
                     llab, comp = label_composition(ref, coords, r_nat, kk, n_pcs=lc_pcs, n_init=lc_init, seed=lc_seed)
@@ -390,7 +395,7 @@ def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
 
     ctx.write_json("selected.json", {"grid": grid_info, "k_report": k_report, "baselines": baselines,
                                      "label_composition": {"radius_um": lc_radius_um, "k": lc_k, "n_pcs": lc_pcs, "n_init": lc_init, "seed": lc_seed},
-                                     "reference_labels": cfg.dataset.labels.column if has_labels else None, "layers": summary})
+                                     "reference_labels": label_name, "layers": summary})
     return {"radii_um": grid_info["radii_um"], "radii_native": grid_info["radii_native"],
             "layers": {k: (v["selected"]["config_native"] if "selected" in v else v.get("skipped")) for k, v in summary.items()}}
 
