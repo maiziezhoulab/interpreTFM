@@ -21,16 +21,14 @@ It extracts hidden states from frozen scGPT, Geneformer and C2S-Scale models, de
 
 Each measure is meant to be read next to its baseline. The [concepts page](concepts.md) explains them in plain language, and the [best practices](best_practices.md) list how to report them.
 
-:::{note}
-This documentation describes the 0.9 pre-release. It contains the `interp_pipeline` package used for the manuscript's analyses; several steps still run from drivers that are not part of the pre-release and are marked as such on the [concepts page](concepts.md).
-A v1.0 pipeline with a single entry point, per-model containers, trained SAEs on Hugging Face and a tutorial is in preparation ([roadmap](roadmap.md)); its command, configuration schema and stage runner are in the development version ([running a pipeline](pipeline/running.md)).
-:::
+Start with the [installation guide](installation.md) (which environment you need), the [tutorial](tutorials/cosmx_crop.md) (the spatial stages on a crop of the public CosMx section, on a CPU) and [running a pipeline](pipeline/running.md) (one command, one configuration file). The manuscript's layers are reproduced from `configs/paper/` ([reproducing the manuscript](reproducing.md)), and the trained SAEs are exported for the Hugging Face Hub ([stage `sae`](pipeline/stage_sae.md), `interpretfm.hub`).
 
 ```{toctree}
 :maxdepth: 2
 :caption: User guide
 
 installation
+tutorials/cosmx_crop
 concepts
 data
 usage
@@ -39,7 +37,7 @@ best_practices
 
 ```{toctree}
 :maxdepth: 2
-:caption: Pipeline (v1, in development)
+:caption: Pipeline
 
 pipeline/configuration
 pipeline/running

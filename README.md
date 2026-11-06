@@ -23,11 +23,12 @@ At the cell level, population specificity (GSI and MHR@100) is compared with tha
 In spatial data, niches built from the features are compared with expression-only baselines, cell-group interfaces are tested with a calibrated statistic and checked for transcript spillover, and a model-free ligand–receptor co-localization screen places candidate pairs in tissue context.
 Every measure is meant to be read next to its baseline, so that a feature-level result can be compared with what raw representations or measured expression already provide.
 
-## Repository status
+## What is in the repository
 
-- This is the development version after the 0.9.0 pre-release (`1.0.0.dev0`). It contains the `interp_pipeline` package used for the manuscript's analyses: model adapters and layer-resolved activation extraction, the sharded activation store, TIS, SAE helpers, held-out concept alignment, cell-level feature tables, and niche and interface building blocks.
-- Several steps of the manuscript run from drivers that are not part of this pre-release: building the gene × concept matrix, the SAE trainer with the fixed ℓ1-weight rule and its untrained control, gene-token projection of features to cells, population specificity, the calibrated interface statistic with spillover checks, and the co-localization screen. The [concepts page](https://interpretfm.readthedocs.io/en/latest/concepts.html) states, for each measure, what 0.9 provides.
-- A v1.0 pipeline with a single entry point, per-model containers, a Hugging Face release of trained SAEs, and a tutorial is in preparation for the final publication. See the [roadmap](https://interpretfm.readthedocs.io/en/latest/roadmap.html).
+- `interpretfm`: the v1 pipeline. One command (`interpretfm run <config.yaml>`) runs every stage from one YAML configuration: input checks, activation extraction in the model's own environment, TIS, SAE training with the λ rule and the untrained control, the concept universe, held-out concept F1, the gene-level readout, feature retention and projection to cells, population specificity, the per-criterion layer table, spatial niches with their baselines, the calibrated interface test, the ligand–receptor co-localization screen and a self-contained HTML report with every metric beside its baseline. The manuscript's six representative layers are configurations in `configs/paper/`, with reproduction tests against the published numbers.
+- `interp_pipeline`: the analysis package of the manuscript (model adapters, the sharded activation store, TIS, held-out concept alignment, the 0.9 building blocks), which the pipeline builds on.
+- `interpretfm hub`: export of trained SAEs to a Hugging Face-ready folder (safetensors, feature table, metrics, model card) and `interpretfm.hub.load_sae` to load them.
+- A CPU tutorial on a crop of the public CosMx section ([tutorial](https://interpretfm.readthedocs.io/en/latest/tutorials/cosmx_crop.html)).
 
 ## Installation
 
@@ -48,25 +49,25 @@ python -m pip install -e .
 ```
 
 The package is tested on Python 3.8, 3.9, 3.10 and 3.11 (continuous integration, CPU).
-Install in editable mode (`-e`): some modules import plotting helpers from `plot/` at the repository root.
-Without conda, install PyTorch for your platform first, then `python -m pip install -e ".[models]"`.
-Model weights, datasets and activation stores are not distributed with the code; see the [installation guide](https://interpretfm.readthedocs.io/en/latest/installation.html).
+The core environment runs every stage after extraction; the per-model environments (`envs/geneformer.yml`, `envs/c2s.yml`; scGPT extraction needs `python -m pip install --no-deps nnsight==0.4.5` in the core environment) are needed for the `extract` stage only, which the pipeline starts as a child process in the environment named by `model.env`.
+Without conda, install PyTorch for your platform first, then `python -m pip install -e ".[models,hub]"`.
+Model weights, datasets and activation stores are not distributed with the code; see the [installation guide](https://interpretfm.readthedocs.io/en/latest/installation.html), in particular "Which environment do I need?".
 
 ## Quick start
 
-**v1 pipeline (in development).** Version 1.0 runs every stage from one YAML configuration through the `interpretfm` command. The command, the configuration schema, the cached stage runner and the stages are in place (input checks, TIS, SAE training and selection, concept universe, held-out concept F1, gene-level readout, feature retention and projection, population specificity, the per-criterion layer table, spatial niches with their expression-only and label-composition baselines, the calibrated interface test, the model-free ligand–receptor co-localization screen with its matched-neighbour radius, and a self-contained HTML report with every metric beside its baseline); extraction from a model runs from a cached activation store for now. Try it on a toy dataset:
+**The pipeline.** Every stage runs from one YAML configuration through the `interpretfm` command; a run is cached and resumable. A complete run on a synthetic dataset with a synthetic activation store takes about a minute on a CPU and ends with the HTML report:
 
 ```bash
-python -c "from interpretfm.testing import write_toy_run; write_toy_run('example')"
+python -c "from interpretfm.testing import write_toy_run; write_toy_run('example', store=True)"
 interpretfm validate example/toy.yaml
-interpretfm run example/toy.yaml --dry-run
-interpretfm run example/toy.yaml --stages ingest
+interpretfm run example/toy.yaml --dry-run                 # the plan: which stages run, which are cached
+interpretfm run example/toy.yaml                           # all stages, then example/runs/toy/13_report/report.html
 interpretfm status example/runs/toy
-# with write_toy_run('example', store=True): every stage, then the report
-interpretfm run example/toy.yaml --stages ingest,extract,tis,sae,concepts,concept_eval,gene_readout,cells,layers,report
 ```
 
-See the [configuration reference](https://interpretfm.readthedocs.io/en/latest/pipeline/configuration.html) and [running a pipeline](https://interpretfm.readthedocs.io/en/latest/pipeline/running.html).
+Your own data: write a configuration ([configuration reference](https://interpretfm.readthedocs.io/en/latest/pipeline/configuration.html); `dataset.h5ad` with raw counts, `dataset.spatial.um_per_unit` for spatial data, `model.checkpoint` and `model.env` for extraction) and run `interpretfm run my.yaml`. The [tutorial](https://interpretfm.readthedocs.io/en/latest/tutorials/cosmx_crop.html) runs the spatial stages on a crop of the public CosMx section from a published SAE, on a CPU; the manuscript's layers are reproduced with `make repro CONFIG=<name>` from `configs/paper/` ([reproducing the manuscript](https://interpretfm.readthedocs.io/en/latest/reproducing.html)). Trained SAEs are exported with `interpretfm hub export <run_dir> <out_dir>` and loaded with `interpretfm.hub.load_sae`.
+
+See [running a pipeline](https://interpretfm.readthedocs.io/en/latest/pipeline/running.html) for the stages, the stage directories and the `--stages` / `--force` options.
 
 **0.9 analysis package.** The stages run as modules with `python -m`. The commands and snippets below are exercised on toy data by `tests/test_smoke.py`.
 
@@ -116,7 +117,7 @@ tis = compute_tis_mis_quantile_streamed(A[has_row], J, q_low=0.25, q_high=0.75, 
 tis_null = compute_tis_mis_quantile_streamed(shuffle_activations(A[has_row]), J, 0.25, 0.75, cfg)
 ```
 
-Not yet available in 0.9: the `sae` and `qc` stages of `all_layer_sae_f1` and the TIS layer screen (`interp_pipeline.tis.single_layer_screen`) load backend modules through `--train-script`, `--qc-script` and `--backend-script` that are not part of this pre-release. These options have no default; a run that needs one stops with a message saying which option is missing (`--status-only` and `--dry-run` work without them). The backends come in v1.0, together with a single command that runs all stages from one configuration file.
+The `sae` and `qc` stages of `all_layer_sae_f1` and the TIS layer screen (`interp_pipeline.tis.single_layer_screen`) load backend modules through `--train-script`, `--qc-script` and `--backend-script`; these options have no default (`--status-only` and `--dry-run` work without them). The pipeline's `tis` and `sae` stages are the supported way to run these steps.
 
 ## Repository layout
 

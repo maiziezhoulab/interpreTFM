@@ -1,6 +1,6 @@
 # Concepts
 
-This page explains each measure in plain language, following the manuscript's Methods. Each section ends with what the 0.9 pre-release provides; "v1.0" marks parts that are planned as packaged stages (see the [roadmap](roadmap.md)).
+This page explains each measure in plain language, following the manuscript's Methods. Each section ends with where the measure is implemented (the pipeline stage and the analysis module).
 
 ## Layer-resolved activations
 
@@ -13,7 +13,7 @@ Two kinds of rows are kept apart:
 
 Stored layer identifiers are zero-based (`layer_1.norm2` is display Layer 2).
 
-**In 0.9:** model adapters (`interp_pipeline.adapters.models`), extraction loops (`interp_pipeline.extraction`) and the activation store (`interp_pipeline.io.activation_store`).
+**Implementation:** the `extract` stage ([stage extract](pipeline/stage_extract.md); adapters in `interpretfm.models`, comparison of stores in `interpretfm.extract`), built on `interp_pipeline.adapters.models`, `interp_pipeline.extraction` and the activation store `interp_pipeline.io.activation_store`.
 
 ## Transcriptomic interpretability score (TIS)
 
@@ -22,7 +22,7 @@ TIS asks whether variation along one representation dimension shows up in the me
 - A high TIS means the dimension's variation is reflected in expression. It does not assign a concept to the dimension.
 - **Controls:** each dimension permuted across cells (the layer-level TIS gain is the mean TIS minus the mean after permutation), and the same activations rotated to their principal components (a dimension-matched change of basis) as a descriptive reference.
 
-**In 0.9:** `interp_pipeline.tis.core` (scores and controls) and `interp_pipeline.tis.io` (reading cell-level rows, building the expression matrix used for similarity). The layer-screen runner `interp_pipeline.tis.single_layer_screen` needs a backend module that is not included (v1.0); its `--backend-script` option has no default.
+**Implementation:** the `tis` stage ([stage tis](pipeline/stage_tis.md); `interpretfm.tis`, with the shuffled and PCA controls), built on `interp_pipeline.tis.core` (scores and controls) and `interp_pipeline.tis.io` (reading cell-level rows, building the expression matrix used for similarity).
 
 ## Sparse autoencoders
 
@@ -30,7 +30,7 @@ Each evaluated layer gets its own SAE, trained on that layer's gene-token activa
 
 In the manuscript the SAE has an encoder bias and an input bias, decoder columns of unit norm, and an ℓ1 weight chosen by a rule fixed in advance: among candidate weights with at most 2% of features active per token and a dead-feature rate of at most 0.25, the one with the lowest fraction of variance unexplained.
 
-**In 0.9:** `interp_pipeline.sae.sae_base.AutoEncoder` and `interp_pipeline.sae.trainers.fit_sae_for_layer` fit a bias-free ReLU SAE; `interp_pipeline.sae.normalize` rescales checkpoints. The concept-alignment evaluator reads checkpoints with or without biases. The trainer with biases, unit-norm decoder and the fixed ℓ1 rule is planned for v1.0.
+**Implementation:** the `sae` stage ([stage sae](pipeline/stage_sae.md); `interpretfm.sae`: the ReLU SAE with biases and unit-norm decoder, dead-feature resampling, the fixed ℓ1-weight rule and the untrained control). `interp_pipeline.sae.sae_base.AutoEncoder` and `interp_pipeline.sae.trainers.fit_sae_for_layer` fit a bias-free ReLU SAE; `interp_pipeline.sae.normalize` rescales checkpoints. The concept-alignment evaluator reads checkpoints with or without biases.
 
 ## Concept universe
 
@@ -38,7 +38,7 @@ Biological concepts come from g:Profiler (human; Gene Ontology biological proces
 
 Because the universe is restricted to the panel, alignment tests concepts that are observable on that panel. It is not genome-wide pathway discovery.
 
-**In 0.9:** `interp_pipeline.get_annotation.gprofiler_client` (cached g:Profiler queries) and `panel`; `membership_gt` builds an alternative GO membership matrix from QuickGO annotations. Writing the binary gene × concept matrix from g:Profiler results is planned as a packaged step for v1.0; its [format](data.md#concept-matrix) is documented so that it can be supplied directly.
+**Implementation:** the `concepts` stage ([stage concepts](pipeline/stage_concepts.md); `interpretfm.concepts`: the g:Profiler universe with a cache and an offline matrix mode), built on `interp_pipeline.get_annotation.gprofiler_client` and `panel`; `membership_gt` builds an alternative GO membership matrix from QuickGO annotations. The [format](data.md#concept-matrix) of the binary gene × concept matrix is documented so that it can be supplied directly.
 
 ## Held-out concept alignment
 
@@ -51,7 +51,7 @@ Two held-out units answer different questions:
 
 **Baselines:** the same analysis, on the same rows, partitions, labels, thresholds and metric, for raw hidden dimensions (each split into its positive and negative parts so that all units are non-negative) and for an untrained SAE of the same width. A per-concept summary counts each concept once: for each concept with 5–100 panel genes and positive rows in both validation and test, the unit with the highest validation F1 is scored by its test F1, and concept F1 is the mean over concepts.
 
-**In 0.9:** `interp_pipeline.get_annotation.f1_alignment.heldout_report_for_layer` (`heldout_unit="gene_token_row"` or `"gene_identity"`). Raw dimensions and untrained SAEs are evaluated by passing them as checkpoints ([best practices](best_practices.md)). The per-concept summary is computed from the validation and test tables it writes; a packaged summary is planned for v1.0.
+**Implementation:** the `concept_eval` stage ([stage concept_eval](pipeline/stage_concept_eval.md); `interpretfm.concept_eval`: both held-out units for SAE features, raw dimensions and the untrained SAE, with the per-concept summary), built on `interp_pipeline.get_annotation.f1_alignment.heldout_report_for_layer` (`heldout_unit="gene_token_row"` or `"gene_identity"`). Raw dimensions and untrained SAEs can also be evaluated by passing them as checkpoints ([best practices](best_practices.md)).
 
 ## Population specificity
 
@@ -60,13 +60,13 @@ Cell-level profiles are the mean activation of each feature over a cell's gene t
 - **Gini specificity index (GSI):** the Gini coefficient of a feature's mean activation across cell populations. GSI excess subtracts the mean GSI of the same feature after shuffling population labels.
 - **Marker-gene hit rate (MHR@100):** cells are split in half within each population. In one half, a population's markers are the 100 genes with the largest mean expression difference between it and all other cells, and the features most correlated with population membership are selected; in the other half, MHR is the share of the genes most correlated with each selected feature that are markers, averaged over populations.
 
-**In 0.9:** not included (v1.0).
+**Implementation:** the `gene_readout` stage ([stage gene_readout](pipeline/stage_gene_readout.md); `interpretfm.gene_readout`).
 
 ## Cell-level projection
 
 Concept-associated features are retained by a fixed rule (for each concept, the feature with the highest validation F1 if it passes a minimum F1, then deduplicated) and projected to cells by averaging over each cell's gene-token rows. Selection uses validation rows only.
 
-**In 0.9:** `interp_pipeline.downstream.f1` (feature tables and GO-based concept reduction) and `build_interpretable_from_sae_latents`, a command-line module (`python -m interp_pipeline.downstream.f1.build_interpretable_from_sae_latents --help`) that builds a cell × concept-feature AnnData from classification-token activations. The gene-token projection used in the manuscript is planned as a packaged stage for v1.0.
+**Implementation:** the `cells` stage ([stage cells](pipeline/stage_cells.md); `interpretfm.cells`: feature retention, gene-token projection to cells, GSI and MHR@k against raw dimensions and single genes). `interp_pipeline.downstream.f1` (feature tables and GO-based concept reduction) and `build_interpretable_from_sae_latents` (`python -m interp_pipeline.downstream.f1.build_interpretable_from_sae_latents --help`) build a cell × concept-feature AnnData from classification-token activations.
 
 ## Spatial niches
 
@@ -74,7 +74,7 @@ For each cell, a microenvironment vector averages the feature profiles of all ce
 
 **Baselines:** the same sweep on components of log-normalized expression (expression-only niches), and neighborhood cell-type composition (label-composition niches), which by construction favors agreement with the same labels.
 
-**In 0.9:** `interp_pipeline.downstream.context` (neighborhoods, microenvironment vectors, clustering, the sweep and its scores, validation summaries). The sweep takes any cell × feature matrix, so the expression-only baseline is run by passing expression components instead of features.
+**Implementation:** the `niches` stage ([stage niches](pipeline/stage_niches.md); `interpretfm.niches`, `interpretfm.niche_concepts`), built on `interp_pipeline.downstream.context` (neighborhoods, microenvironment vectors, clustering, the sweep and its scores, validation summaries). The sweep takes any cell × feature matrix, so the expression-only baseline is run by passing expression components instead of features.
 
 ## Interface statistic and spillover checks
 
@@ -86,7 +86,7 @@ A cell's program load is the mean of its clipped, standardized, positive feature
 
 A negative z-score means depletion relative to the null, not biological avoidance.
 
-**In 0.9:** `interp_pipeline.downstream.interaction` provides program scores, radius edges, group-pair tables and a within-tile permutation null. The count adjustment, the stratified null, the contact-free calibration and the spillover checks are planned for v1.0.
+**Implementation:** the `interfaces` stage ([stage interfaces](pipeline/stage_interfaces.md); `interpretfm.interfaces`: the count adjustment, the stratified null, the contact-free calibration and the spillover checks), built on `interp_pipeline.downstream.interaction` (program scores, radius edges, group-pair tables, the within-tile permutation null).
 
 ## Ligand–receptor co-localization screen
 
@@ -94,4 +94,4 @@ This screen uses no model features. For each ligand–receptor pair whose genes 
 
 It reports co-localization of expression, not ligand binding, signaling direction or receptor activation.
 
-**In 0.9:** not included (v1.0).
+**Implementation:** the `lr_screen` stage ([stage lr_screen](pipeline/stage_lr_screen.md); `interpretfm.lr_screen`, `interpretfm.neighbours`).

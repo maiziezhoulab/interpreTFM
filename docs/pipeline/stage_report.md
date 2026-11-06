@@ -1,6 +1,6 @@
 # Stage `report`: the run report
 
-Directory `13_report/`, written by the `report` stage (inputs: `ingest`, `layers`) or rebuilt at any time with `interpretfm report <run_dir>` from the resolved configuration and the finished stages. Every finished stage is read; a stage that did not run, or was skipped (scRNA-seq mode), renders as "not run" or "skipped" without an error.
+Directory `13_report/`, written by the `report` stage (inputs: `ingest`, `layers`) or rebuilt at any time with `interpretfm report <run_dir>` from the resolved configuration and the finished stages. Every finished stage is read; a stage that did not run, or was skipped (scRNA-seq mode), renders as "not run" or "skipped" without an error. `stages.report.spatial_only: true` drops the requirement on `layers`, for a run of the spatial stages alone on published projected features (`cells_h5ad` of `niches` and `interfaces`; the [tutorial](../tutorials/cosmx_crop.md) does this): the layer, SAE and cell sections then render as "not run".
 
 ## Files
 

@@ -12,8 +12,10 @@ The configurations in `configs/paper/` hold, for each of the six representative 
 | `xenium_c2s_layer14.yaml` | Xenium RCC | C2S-Scale | `layer_13` (14) |
 
 :::{note}
-The reproduction data (datasets, activation stores of 24-46 GB per layer, SAE checkpoints and held-out tables) are not part of the repository. They will be deposited with the release; until then the configurations run on the machine that holds them. The cached intermediates let the tests also check the pure summary rules (λ selection, concept-F1 summary) in seconds, without a pipeline run.
+The reproduction data (datasets, activation stores of 24-46 GB per layer, SAE checkpoints and held-out tables) are not part of the repository; they are deposited with the release (see the data statement of the manuscript). The cached intermediates let the tests also check the pure summary rules (λ selection, concept-F1 summary) in seconds, without a pipeline run. The trained SAEs of the six layers are also published on the Hugging Face Hub (`interpretfm.hub.load_sae`), and the [tutorial](tutorials/cosmx_crop.md) runs the spatial stages from one of them on a crop of the CosMx section without any of the stores.
 :::
+
+What runs where: every stage of the paper configurations runs in the core environment on a CPU (the stores are cached), so no model environment or GPU is needed; only the fresh-extraction configurations below start the model environments. See [which environment do I need?](installation.md#which-environment-do-i-need).
 
 ## Data layout
 

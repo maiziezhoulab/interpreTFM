@@ -423,6 +423,33 @@ def load_features(repo_or_path: Union[str, Path], model: str, layer: str, datase
     return pd.read_csv(layer_dir(repo_or_path, model, layer, dataset=dataset, **kw) / FEATURES_FILE)
 
 
+TUTORIAL_FILES = ("tutorial/*", "scgpt/cosmx/layer_1.norm2/*")
+
+
+def tutorial_bundle(source: str = "local", path: Optional[Union[str, Path]] = None, repo_id: str = DEFAULT_REPO,
+                    revision: Optional[str] = None, cache_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Root folder of the tutorial data (``tutorial/`` with the CosMx crop, its projected features, a store slice
+    and the label groups, beside the exported SAE ``scgpt/cosmx/layer_1.norm2/``).
+
+    ``source="local"`` uses the folder ``path`` (a downloaded or self-built bundle); ``source="hub"`` downloads the
+    tutorial files of the Hugging Face repository ``repo_id`` with ``huggingface_hub``.
+    """
+    if source == "local":
+        if path is None:
+            raise ValueError("tutorial_bundle(source='local') needs path=<bundle folder>")
+        root = Path(path)
+        if not (root / "tutorial" / "cosmx_crop.h5ad").exists():
+            raise FileNotFoundError(f"{root}: not a tutorial bundle (tutorial/cosmx_crop.h5ad missing)")
+        return root
+    if source != "hub":
+        raise ValueError("source must be 'local' or 'hub'")
+    if repo_id == DEFAULT_REPO:
+        raise ValueError(f"the repository id is the placeholder {DEFAULT_REPO!r}; pass the published repository")
+    from huggingface_hub import snapshot_download
+
+    return Path(snapshot_download(repo_id=repo_id, revision=revision, cache_dir=cache_dir, allow_patterns=list(TUTORIAL_FILES)))
+
+
 def verify_export(out_dir: Union[str, Path], run_dirs: Sequence[Union[str, Path]]) -> List[Dict[str, Any]]:
     """Reload every exported layer of ``run_dirs`` and compare it tensor by tensor with the run's checkpoint."""
     import torch

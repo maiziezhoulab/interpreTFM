@@ -44,3 +44,20 @@ The **untrained baseline** is a ReLU SAE of the same width at its seeded default
 ```
 
 A checkpoint is a `torch.save` dict with `state_dict`, `d_in`, `n_latents`, `spec`, `input_scale`, `architecture` and `summary`; `interpretfm.sae.Encoder` encodes activations with it, `interpretfm.sae.load_checkpoint` reads it (the 0.9 `.pt` files load unchanged).
+
+## Publishing trained SAEs (`interpretfm hub`)
+
+`interpretfm hub export <run_dir…> <out_dir>` writes, for every selected SAE of the runs, the folder `<out_dir>/<model>/<dataset>/<layer>/` with `sae.safetensors` (the tensors as trained), `config.json` (`d_in`, `n_latents`, `architecture`, `input_scale`, the training specification, the λ rule, the model, layer and dataset), `features.csv` (the retained feature–concept table of the `cells` stage), `metrics.json` (QC with the untrained control, concept F1 beside raw dimensions and the untrained SAE on both held-out units, the gene-level readout, cell specificity against raw dimensions and single genes, the layer-table row) and a model card `README.md`; `<out_dir>/README.md` indexes the layers. `--repo-id <user>/<repo>` names the Hugging Face repository in the cards; `interpretfm hub verify <run_dir…> <out_dir>` reloads every export and compares it tensor by tensor with the run's checkpoint. The folder is uploaded as it is (`huggingface-cli upload`); the command never uploads. The `dataset` of the folder is the prefix of the run name (`cosmx`, `xenium`).
+
+Loading, from a local export or from the Hub (the extra `hub` installs `safetensors` and `huggingface_hub`):
+
+```python
+from interpretfm.hub import load_sae, load_features
+from interpretfm.sae import Encoder
+
+ckpt = load_sae("<user>/interpretfm-v1", model="scgpt", layer="layer_1.norm2", dataset="cosmx")  # or a local folder
+encoder = Encoder(ckpt)                 # encoder.encode(rows) -> features
+features = load_features("<user>/interpretfm-v1", "scgpt", "layer_1.norm2", dataset="cosmx")
+```
+
+A published SAE can also be given to the `sae` stage of a new run through `stages.sae.checkpoints` after converting it back to a `.pt` checkpoint (`torch.save(load_sae(...), path)`), so that the later stages evaluate it on a new store.
