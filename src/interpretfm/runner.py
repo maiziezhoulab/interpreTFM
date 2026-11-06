@@ -59,8 +59,16 @@ class Stage:
     outputs: List[str] = field(default_factory=list)
     env: str = "core"  #: ``core`` or ``model``
     applies: Optional[Callable[[Config], bool]] = None
+    needs_model_env: Optional[Callable[[Config], bool]] = None  #: ``env="model"`` stages: False -> run in-process for this config
     order: int = 99
     doc: str = ""
+
+    def runs_in_model_env(self, cfg: Config) -> bool:
+        """Whether the runner starts this stage in ``model.env`` for ``cfg`` (a model stage with an
+        environment other than the current interpreter, unless ``needs_model_env`` says no)."""
+        if self.env != "model" or cfg.model.env.kind == "current":
+            return False
+        return self.needs_model_env is None or bool(self.needs_model_env(cfg))
 
     @property
     def dir_name(self) -> str:
@@ -72,12 +80,16 @@ _REGISTRY: Dict[str, Stage] = {}
 
 def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[str] = (), env: str = "core",
                    applies: Optional[Callable[[Config], bool]] = None, order: Optional[int] = None,
-                   replace: bool = False) -> Callable[[StageFunc], StageFunc]:
+                   replace: bool = False, needs_model_env: Optional[Callable[[Config], bool]] = None,
+                   ) -> Callable[[StageFunc], StageFunc]:
     """Decorator registering ``func`` as the implementation of stage ``name``.
 
     ``order`` defaults to the position in :data:`interpretfm.config.STAGE_ORDER` (1-based) and
     99 for other names. Registering a name twice is an error unless ``replace`` is set (tests
-    and plug-ins use it to swap an implementation).
+    and plug-ins use it to swap an implementation). ``env="model"`` stages run in ``model.env``
+    through :mod:`interpretfm.envs`; ``needs_model_env(cfg)`` can return False to keep a
+    particular configuration in-process (``extract`` with a cached store), and ``model.env: {}``
+    always runs in-process.
     """
     if env not in ("core", "model"):
         raise ValueError(f"stage {name!r}: env must be 'core' or 'model', got {env!r}")
@@ -87,8 +99,8 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
             raise ValueError(f"stage {name!r} is already registered (use replace=True to override)")
         pos = order if order is not None else (STAGE_ORDER.index(name) + 1 if name in STAGE_ORDER else 99)
         _REGISTRY[name] = Stage(name=name, func=func, inputs=list(inputs), outputs=list(outputs), env=env,
-                                applies=applies, order=pos, doc=(func.__doc__ or "").strip().splitlines()[0]
-                                if func.__doc__ else "")
+                                applies=applies, needs_model_env=needs_model_env, order=pos,
+                                doc=(func.__doc__ or "").strip().splitlines()[0] if func.__doc__ else "")
         return func
 
     return deco
@@ -188,8 +200,8 @@ def plan(cfg: Config, stages: Optional[Iterable[str]] = None, force: bool = Fals
             action, reason = "skip-cached", "outputs present and configuration unchanged"
         else:
             action, reason = "run", "forced" if force else "no valid cached result"
-        out.append({"stage": st.name, "dir": st.dir_name, "env": st.env, "action": action, "reason": reason,
-                    "config_hash": cfg.stage_hash(st.name)})
+        out.append({"stage": st.name, "dir": st.dir_name, "env": "model" if st.runs_in_model_env(cfg) else "core",
+                    "action": action, "reason": reason, "config_hash": cfg.stage_hash(st.name)})
     return out
 
 
@@ -250,21 +262,32 @@ def run_stage_inprocess(cfg: Config, name: str, run_dir: Optional[Path] = None) 
     return manifest
 
 
+def model_stage_args(cfg: Config, st: Stage, run_dir: Path) -> List[str]:
+    """The ``interpretfm.cli`` arguments that run ``st`` in a child process: the ``extract`` verb
+    (with the model and layers, checked by the child against the resolved configuration) or the
+    generic ``stage`` verb."""
+    resolved = run_dir / RESOLVED_CONFIG
+    if st.name == "extract":
+        return ["extract", "--config", str(resolved), "--run-dir", str(run_dir), "--model", cfg.model.name,
+                "--layers", ",".join(cfg.model.layers)]
+    return ["stage", st.name, "--config", str(resolved), "--run-dir", str(run_dir)]
+
+
 def _run_stage_in_model_env(cfg: Config, st: Stage, run_dir: Path) -> StageManifest:
-    from interpretfm.envs import EnvError, env_summary, run_in_env
+    from interpretfm.envs import EnvError, config_binds, env_summary, run_in_env
 
     sdir = run_dir / st.dir_name
     sdir.mkdir(parents=True, exist_ok=True)
-    resolved = run_dir / RESOLVED_CONFIG
-    summary = env_summary(cfg.model.env)
+    binds = config_binds(cfg, run_dir)
+    summary = env_summary(cfg.model.env, binds=binds, cwd=run_dir)
     log.info("stage %s: running in model environment: %s", st.name, summary.get("description") or summary.get("error"))
     if "error" in summary:
         m = StageManifest(stage=st.name, config_hash=cfg.stage_hash(st.name), model_env=summary)
         m.finish("failed", error=summary["error"]).write(sdir)
         raise StageError(f"stage {st.name!r}: {summary['error']}")
-    args = ["stage", st.name, "--config", str(resolved), "--run-dir", str(run_dir)]
+    args = model_stage_args(cfg, st, run_dir)
     try:
-        run_in_env(cfg.model.env, "interpretfm.cli", args, log_file=sdir / "log.txt", cwd=run_dir)
+        run_in_env(cfg.model.env, "interpretfm.cli", args, log_file=sdir / "log.txt", cwd=run_dir, binds=binds)
     except EnvError as e:
         m = StageManifest.read(sdir)
         if m is None or m.status != "failed":
@@ -322,7 +345,7 @@ def run(cfg: Config, stages: Optional[Iterable[str]] = None, force: bool = False
                 done_now.add(st.name)
                 continue
             _check_inputs(st, run_dir, done_now)
-            if st.env == "model":
+            if st.runs_in_model_env(cfg):
                 m = _run_stage_in_model_env(cfg, st, run_dir)
             else:
                 m = run_stage_inprocess(cfg, st.name, run_dir)

@@ -1,0 +1,47 @@
+# Fresh extraction check: CosMx lung-cancer section, Geneformer V2 (the 104M-parameter model at
+# the top level of the ctheodoris/Geneformer repository), layer `layer_1`, on a seeded subset of
+# 2,000 cells, inside the Geneformer environment on a GPU. The reproduction test
+# `tests/reproduction/test_extraction.py` (INTERPRETFM_REPRO_GPU=1) compares the rows with the
+# manuscript's cached store (`acts_extraction_geneformer_cosmx`) and the cell-level projection
+# through the cached SAE.
+#   interpretfm run configs/paper/extract_cosmx_geneformer.yaml --env-file configs/paper/paths.env --stages ingest,extract
+# Placeholders: INTERPRETFM_GENEFORMER_ENV is the conda environment of envs/geneformer.yml;
+# INTERPRETFM_GENEFORMER_MODEL the model folder (config.json + weights).
+
+run:
+  name: extract_cosmx_geneformer
+  out_dir: ${INTERPRETFM_RUNS}/extract_cosmx_geneformer
+  seed: 0
+
+dataset:
+  h5ad: ${INTERPRETFM_DATA}/cosmx_human_lung_sec8.h5ad   # 81,236 cells x 960 genes, X = raw counts
+  counts_layer: null
+  gene_id: {column: index, kind: ensembl}                 # var_names are Ensembl ids (the Geneformer gene key)
+  labels: {column: author_cell_type, groups: cosmx_author_groups.csv}
+  spatial: {obsm: spatial, um_per_unit: 0.18}
+  qc: {min_transcripts: 0, min_genes: 0}
+
+model:
+  name: geneformer
+  checkpoint: ${INTERPRETFM_GENEFORMER_MODEL}
+  env: {conda: "${INTERPRETFM_GENEFORMER_ENV}"}
+  layers: [layer_1]
+  cell_pooling: {kind: token, token: "<cls>"}             # Geneformer V2 <cls> token
+  special_tokens: ["<cls>", "<eos>"]                      # stored token ids are Ensembl ids
+  representative_layer: layer_1
+
+stages:
+  # The manuscript's extraction settings: V2 tokenizer (rank-value encoding with <cls>/<eos>),
+  # 8 cells per forward pass, float16 rows; one store shard per block of consecutive cells.
+  extract:
+    cell_subset: 2000
+    batch_size: 8
+    dtype: float16
+    rows_per_shard: 50000
+    device: cuda
+    geneformer: {model_version: V2, nproc: 1}
+
+output:
+  html: false
+  json: true
+  keep_store: true

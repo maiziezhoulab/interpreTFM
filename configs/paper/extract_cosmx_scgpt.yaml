@@ -1,0 +1,47 @@
+# Fresh extraction check: CosMx lung-cancer section, scGPT whole-human, layer `layer_1.norm2`,
+# on a seeded subset of 2,000 cells, inside the scGPT environment on a GPU. The reproduction
+# test `tests/reproduction/test_extraction.py` (run with INTERPRETFM_REPRO_GPU=1) compares the
+# rows with the manuscript's cached store (`acts_extraction_scgpt_cosmx`) cell by cell and the
+# cell-level projection through the cached SAE with the `cells` stage of the paper run.
+#   interpretfm run configs/paper/extract_cosmx_scgpt.yaml --env-file configs/paper/paths.env --stages ingest,extract
+# Placeholders: INTERPRETFM_SCGPT_ENV is the conda environment that holds the scGPT stack
+# (envs/interpretfm.yml -> "interpretfm"); the package must be importable there.
+
+run:
+  name: extract_cosmx_scgpt
+  out_dir: ${INTERPRETFM_RUNS}/extract_cosmx_scgpt
+  seed: 0
+
+dataset:
+  h5ad: ${INTERPRETFM_DATA}/cosmx_human_lung_sec8.h5ad   # 81,236 cells x 960 genes, X = raw counts
+  counts_layer: null
+  gene_id: {column: index, kind: ensembl}                 # var_names are Ensembl ids; symbols in var["feature_name"]
+  labels: {column: author_cell_type, groups: cosmx_author_groups.csv}
+  spatial: {obsm: spatial, um_per_unit: 0.18}
+  qc: {min_transcripts: 0, min_genes: 0}
+
+model:
+  name: scgpt
+  checkpoint: ${INTERPRETFM_MODELS}/scGPT/whole-human-pretrain   # best_model.pt + vocab.json
+  env: {conda: "${INTERPRETFM_SCGPT_ENV}"}
+  layers: [layer_1.norm2]
+  cell_pooling: {kind: token, token: "60695"}             # scGPT <cls> token id
+  special_tokens: ["60694", "60695"]                      # <pad>, <cls>
+  representative_layer: layer_1.norm2
+
+stages:
+  # The manuscript's extraction settings: 8 cells per batch, at most 512 tokens per cell
+  # (<cls> + expressed genes, log1p counts), float32 rows; padding rows are not stored.
+  extract:
+    cell_subset: 2000
+    batch_size: 8
+    max_length: 512
+    dtype: float32
+    rows_per_shard: 50000
+    device: cuda
+    gene_keys: {symbol_column: feature_name}
+
+output:
+  html: false
+  json: true
+  keep_store: true

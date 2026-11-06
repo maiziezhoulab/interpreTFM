@@ -41,6 +41,10 @@ def extract_activations(
     batch_size = int(extraction_cfg.get("batch_size", 16))
     max_length = int(extraction_cfg.get("max_length", 1200))
     shard_id = int(extraction_cfg.get("start_shard", 0))
+    save_dtype = extraction_cfg.get("save_dtype")  # "float16" / "float32" / None (keep the model's dtype)
+    if save_dtype is not None:
+        save_dtype = {"fp16": torch.float16, "float16": torch.float16, "fp32": torch.float32,
+                      "float32": torch.float32}[str(save_dtype)]
 
     max_shards = extraction_cfg.get("max_shards", 512)
     if max_shards is not None:
@@ -67,6 +71,8 @@ def extract_activations(
             return
 
         acts_cat = torch.cat(b["acts"], dim=0)
+        if save_dtype is not None:
+            acts_cat = acts_cat.to(save_dtype)
         store.write_token_shard(
             layer=layer_name,
             shard_id=shard_id,
