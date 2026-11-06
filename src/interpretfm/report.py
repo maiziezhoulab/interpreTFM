@@ -96,6 +96,10 @@ def collect(cfg, run_dir: Union[str, Path]) -> Dict[str, Any]:
     spec = _read_json(dirs["cells"] / "specificity.json") or {}
     sae = _read_json(dirs["sae"] / "selected.json") or {}
     niches = _read_json(dirs["niches"] / "selected.json") or {}
+    interfaces = _read_json(dirs["interfaces"] / "summary.json") or {}
+    if_status = by_name.get("interfaces", {}).get("status", "not run")
+    spatial_note += {"done": "; interfaces: run", "skipped": "", "failed": "; interfaces: failed (see 11_interfaces/manifest.json)",
+                     "not run": "; interfaces: not run"}.get(if_status, f"; interfaces: {if_status}")
 
     metrics = []
     for r in table.to_dict(orient="records"):
@@ -124,6 +128,7 @@ def collect(cfg, run_dir: Union[str, Path]) -> Dict[str, Any]:
         "cells": {"selection": sel.get("layers", {}), "specificity": {layer: {k: v for k, v in e.items() if k != "populations"}
                                                                       for layer, e in (spec.get("layers") or {}).items()}},
         "niches": niche_metrics(niches),
+        "interfaces": interface_metrics(interfaces),
         "how_to_read": HOW_TO_READ,
     }
     return _clean(report)
@@ -166,6 +171,40 @@ def niche_metrics(niches: Dict[str, Any]) -> Dict[str, Any]:
             "seed_stability": {"k": stab.get("k"), "model": (stab.get("model") or {}).get("median_seed_ari"),
                                "expression": (stab.get("expression_svd50") or {}).get("median_seed_ari")},
             "top_concepts": (e.get("concepts") or {}).get("top"),
+        }
+    return out
+
+
+def interface_metrics(interfaces: Dict[str, Any]) -> Dict[str, Any]:
+    """The interface numbers next to their baselines, per layer, from ``11_interfaces/summary.json``:
+    the share of ``|z| > 2`` under the legacy tile null beside the calibrated null, ``z*``, the
+    smooth-field and i.i.d.-noise false-positive shares, the calls (niche and niche-free) and the
+    effect sizes."""
+    out: Dict[str, Any] = {}
+    params = interfaces.get("params") or {}
+    for layer, e in (interfaces.get("layers") or {}).items():
+        if e.get("skipped"):
+            out[layer] = {"skipped": e["skipped"]}
+            continue
+        cal = e.get("calibration") or {}
+        sn, sf = e.get("n_supported_niche") or {}, e.get("n_supported_free") or {}
+        eff = e.get("effect_pct_v2") or {}
+        out[layer] = {
+            "n_cells": e.get("n_cells"), "n_features": e.get("n_features"), "n_edges": e.get("n_edges"),
+            "niche_column": e.get("niche_column"), "n_niches": e.get("n_niches"),
+            "units": {"edge_radius_native": params.get("edge_radius"), "block_native": params.get("block"),
+                      "legacy_tile_native": params.get("legacy_tile"), **(params.get("um") or {})},
+            "n_pairs": {"niche": e.get("n_pairs_niche"), "free": e.get("n_pairs_free")},
+            "share_abs_z_gt2": {"legacy_tile": e.get("frac_absz_gt2_v1"), "calibrated": e.get("frac_absz_gt2_v2")},
+            "z_star": {"niche": cal.get("zstar_niche"), "free": cal.get("zstar_free")},
+            "fpr": {"smooth_field_legacy": (cal.get("v1") or {}).get("fpr_abs_z_gt2"), "smooth_field_calibrated": (cal.get("v2n") or {}).get("fpr_abs_z_gt2"),
+                    "smooth_field_free": (cal.get("v2f") or {}).get("fpr_abs_z_gt2"), "iid_noise": (cal.get("iid_noise_v2n") or {}).get("fpr_abs_z_gt2")},
+            "calls": {"niche": {"enriched": sn.get("enriched", 0), "depleted": sn.get("depleted", 0), "not_supported": sn.get("not supported", 0)},
+                      "free": {"enriched": sf.get("enriched", 0), "depleted": sf.get("depleted", 0), "not_supported": sf.get("not supported", 0)}},
+            "effect_pct": {"median_abs": eff.get("median_abs"), "max_abs": eff.get("max_abs")},
+            "neighbour_corr": {"P": cal.get("neighbour_corr_P"), "P_adj": cal.get("neighbour_corr_Padj")},
+            "covariates": e.get("covariates"),
+            "fired_on": {k: v for k, v in (e.get("fired_on") or {}).items() if k in ("n_rows", "n_features", "median_n_fired", "skipped", "enabled")},
         }
     return out
 
@@ -413,6 +452,26 @@ def render_html(report: Dict[str, Any], figures: Dict[str, str]) -> str:
         parts.append(_table(["layer", "selected configuration", "ARI", "NMI", "seed ARI", "purity (model)",
                              "expression-only winner ARI / NMI", "expression at the model's configuration",
                              "label composition ARI / NMI", "seed stability (median ARI, k 4-5)", "top concepts"], rows, base_cols=[6, 7, 8]))
+    if r.get("interfaces"):
+        parts.append("<h3>Interfaces <span class='muted'>(calibrated interface test; the legacy tile null and the smooth-field / noise "
+                     "false-positive shares are its baselines)</span></h3>")
+        rows = []
+        for layer, e in r["interfaces"].items():
+            if e.get("skipped"):
+                rows.append([layer, e["skipped"]] + ["–"] * 8)
+                continue
+            sh, zs, fp, c, eff = e["share_abs_z_gt2"], e["z_star"], e["fpr"], e["calls"], e["effect_pct"]
+            rows.append([layer, f"{e['n_pairs']['niche']} / {e['n_pairs']['free']}",
+                         f"{_fmt(sh.get('calibrated'))} vs tile null {_fmt(sh.get('legacy_tile'))}",
+                         f"{_fmt(zs.get('niche'))} / {_fmt(zs.get('free'))}",
+                         f"smooth {_fmt(fp.get('smooth_field_calibrated'))} (tile null {_fmt(fp.get('smooth_field_legacy'))}), noise {_fmt(fp.get('iid_noise'))}",
+                         f"{c['niche']['enriched']} / {c['niche']['depleted']}", f"{c['free']['enriched']} / {c['free']['depleted']}",
+                         f"{_fmt(eff.get('median_abs'))} / {_fmt(eff.get('max_abs'))}",
+                         f"P {_fmt(e['neighbour_corr'].get('P'))}, P_adj {_fmt(e['neighbour_corr'].get('P_adj'))}",
+                         f"{e.get('niche_column')}; {', '.join(e.get('covariates') or [])}"])
+        parts.append(_table(["layer", "pairs (niche / niche-free)", "share |z| > 2 (calibrated vs tile null)", "z* (niche / free)",
+                             "false-positive share of |z| > 2", "enriched / depleted (niche)", "enriched / depleted (niche-free)",
+                             "median / max |effect| %", "neighbour correlation", "niche partition; covariates"], rows, base_cols=[2, 4]))
     parts.append("<h2>Stages</h2>")
     rows = [[s["stage"], s["status"], s["duration_s"], s.get("error") or ""] for s in r["stages"]]
     parts.append(_table(["stage", "status", "seconds", "error"], rows))
@@ -434,4 +493,4 @@ def write_report(cfg, run_dir: Union[str, Path], out_dir: Union[str, Path], html
     return report
 
 
-__all__ = ["COLORS", "HOW_TO_READ", "collect", "make_figures", "niche_metrics", "render_html", "write_report"]
+__all__ = ["COLORS", "HOW_TO_READ", "collect", "interface_metrics", "make_figures", "niche_metrics", "render_html", "write_report"]

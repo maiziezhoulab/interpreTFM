@@ -1,7 +1,7 @@
 # Running a pipeline
 
 :::{note}
-In development. The command, the configuration, the runner and the stages `ingest`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers` and `report` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and the spatial stages so far cover the niches (`niches`; the interface test and the ligand–receptor screen follow), which are skipped for a dataset without coordinates. `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
+In development. The command, the configuration, the runner and the stages `ingest`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers` and `report` work; `extract` runs only from a cached activation store (`stages.extract.store_root`), and the spatial stages so far cover the niches (`niches`) and the calibrated interface test (`interfaces`; the ligand–receptor screen follows), which are skipped for a dataset without coordinates. `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
 :::
 
 ## The command
@@ -35,7 +35,8 @@ Exit codes: 0 success; 1 a stage failed (its `manifest.json` holds the error); 2
 | 8 | `cells` | ingest, extract, sae, concepts, concept_eval | core | `selection.json`, `specificity.json` |
 | 9 | `layers` | tis, sae, concept_eval, gene_readout, cells | core | `layer_table.csv`, `recommendations.json` |
 | 10 | `niches` | ingest, cells | core | `selected.json`; skipped without coordinates |
-| 11 | `report` | ingest, layers | core | `report.json` (+ `report.html`) |
+| 11 | `interfaces` | ingest, extract, cells, niches | core | `summary.json`; skipped without coordinates |
+| 12 | `report` | ingest, layers | core | `report.json` (+ `report.html`) |
 
 Stages run in this order. With `--stages`, every selected stage still needs its inputs to have completed in the run directory (in this invocation or an earlier one); otherwise the run stops with a message naming the missing stage.
 
@@ -63,7 +64,7 @@ With `write_toy_run("example", store=True)` (a synthetic activation store and co
 
 ```bash
 interpretfm run example/toy.yaml
-xdg-open example/runs/toy/11_report/report.html
+xdg-open example/runs/toy/12_report/report.html
 ```
 
 `configs/toy.yaml` is the same configuration, for a dataset written to `data/toy.h5ad` at the repository root.

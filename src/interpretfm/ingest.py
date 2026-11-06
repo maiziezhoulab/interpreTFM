@@ -22,6 +22,51 @@ class IngestError(ValueError):
     """The dataset does not match the configuration (the message names the key to fix)."""
 
 
+# --- labels -------------------------------------------------------------------------------------
+
+
+def dataset_labels(ds, adata) -> Optional[np.ndarray]:
+    """Per-cell labels (object array of strings) as ``dataset.labels`` declares them: the ``obs``
+    column, or the ``file_column`` of the CSV ``file`` keyed by cell id (every cell of the
+    dataset must appear in it). ``None`` when the configuration has no labels."""
+    import pandas as pd
+
+    lab = ds.labels
+    if lab is None:
+        return None
+    if lab.file is not None:
+        if not Path(lab.file).is_file():
+            raise IngestError(f"dataset.labels.file: file not found: {lab.file}")
+        table = pd.read_csv(lab.file, index_col=0)
+        table.index = table.index.astype(str)
+        if lab.file_column not in table.columns:
+            raise IngestError(f"dataset.labels.file_column: '{lab.file_column}' not in {lab.file} (columns: {list(table.columns)})")
+        values = table[lab.file_column].reindex([str(o) for o in adata.obs_names])
+        if values.isna().any():
+            missing = [str(o) for o, v in zip(adata.obs_names, values.isna()) if v][:5]
+            raise IngestError(f"dataset.labels.file: {int(values.isna().sum())} cells of the dataset are missing from {lab.file} "
+                              f"(e.g. {missing})")
+        return values.astype(str).to_numpy(dtype=object)
+    if lab.column not in adata.obs.columns:
+        raise IngestError(f"dataset.labels.column: '{lab.column}' not in adata.obs (columns: {list(adata.obs.columns)})")
+    return adata.obs[lab.column].astype(str).to_numpy(dtype=object)
+
+
+def label_group_map(ds) -> Dict[str, str]:
+    """The label → group mapping of ``dataset.labels`` (``groups`` CSV merged with ``group_map``;
+    empty without either)."""
+    from interpretfm.interfaces import load_group_map, norm_label
+
+    lab = ds.labels
+    if lab is None:
+        return {}
+    out: Dict[str, str] = {}
+    if lab.groups is not None:
+        out.update(load_group_map(lab.groups))
+    out.update({norm_label(k): norm_label(v) for k, v in (lab.group_map or {}).items()})
+    return out
+
+
 # --- counts -------------------------------------------------------------------------------------
 
 

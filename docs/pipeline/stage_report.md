@@ -1,6 +1,6 @@
 # Stage `report`: the run report
 
-Directory `11_report/`, written by the `report` stage (inputs: `ingest`, `layers`) or rebuilt at any time with `interpretfm report <run_dir>` from the resolved configuration and the finished stages.
+Directory `12_report/`, written by the `report` stage (inputs: `ingest`, `layers`) or rebuilt at any time with `interpretfm report <run_dir>` from the resolved configuration and the finished stages.
 
 ## Files
 

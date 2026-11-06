@@ -40,7 +40,7 @@ from interpretfm.runner import run, stage_dir
 from interpretfm.stages.niches import niche_grid
 from interpretfm.testing import make_toy_adata, write_toy_run
 
-ALL_STAGES = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers", "niches", "report"]
+ALL_STAGES = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers", "niches", "interfaces", "report"]
 
 
 # --- fixtures ----------------------------------------------------------------------------------
@@ -116,7 +116,7 @@ def test_niche_stage_outputs(toy_run):
 
 def test_report_includes_niches(toy_run):
     r = json.loads((stage_dir(toy_run.run.out_dir, "report") / "report.json").read_text())
-    assert r["spatial"] == {"status": "done", "note": "niches: run"}
+    assert r["spatial"] == {"status": "done", "note": "niches: run; interfaces: run"}
     n = r["niches"]["layer_1.norm2"]
     assert n["config"] and "ari" in n["model"] and n["baselines"]["expression_winner"]["config"]
     assert n["baselines"]["label_composition"]["config"].startswith("r12um/composition/kmeans/k2")

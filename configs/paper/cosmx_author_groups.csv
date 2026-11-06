@@ -1,0 +1,23 @@
+label,group
+tumor 5,tumor
+tumor 6,tumor
+tumor 9,tumor
+tumor 12,tumor
+tumor 13,tumor
+B-cell,b_plasma
+plasmablast,b_plasma
+pDC,dendritic
+mDC,dendritic
+epithelial,epithelial_non_tumor
+T CD8 memory,t_cd8_memory
+T CD4 memory,t_cd4_memory
+T CD8 naive,t_cd8_naive
+T CD4 naive,t_cd4_naive
+Treg,treg
+NK,nk
+macrophage,macrophage
+fibroblast,fibroblast
+endothelial,endothelial
+mast,mast
+monocyte,monocyte
+neutrophil,neutrophil

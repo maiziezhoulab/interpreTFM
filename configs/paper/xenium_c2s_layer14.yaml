@@ -124,6 +124,28 @@ stages:
     concepts: {top_k: 25, active_threshold: 0.0, min_cells: 20, rank_by: effect}
     fixed_configs: [{radius_um: 150.0, space: m, method: gmm, k: 3}]   # the manuscript's selected configuration, validated whatever the sweep picks
 
+  # Interfaces (P3-C completes the Xenium label scheme: the manuscript tested marker-derived labels read from a
+  # per-cell CSV, dataset.labels.file, with the cell-type group map; the values below are the paper's):
+  # edge radius and stratum block 120 um, legacy tile 400 um, smooth-field length scales 60 / 150 / 400 um;
+  # covariates: log counts, log genes, log cell_area. The manuscript's fired-on genes read shards until
+  # 700,000 gene-token rows (max_shards here is a placeholder for P3-C).
+  interfaces:
+    edge_radius_um: 120.0
+    block_um: 120.0
+    legacy_tile_um: 400.0
+    length_scales_um: [60.0, 150.0, 400.0]
+    n_perm: 100
+    calib_perm: 50
+    calib_reps: 2
+    legacy_perm: 20
+    min_edges: 50
+    clip_quantile: 0.995
+    exclude_groups: [low_quality, unresolved]
+    covariates: {area: {column: cell_area}}
+    niche: {config: "r150um/m/gmm/k3"}
+    markers: {enabled: true, top_n: 10}
+    fired_on: {enabled: true, max_shards: 4, threshold: 0.15, rate: 0.2, mass: 0.8}
+
 output:
   html: true
   json: true

@@ -11,8 +11,9 @@ Two kinds of test, as in ``test_model_stages.py``:
   niche concept labels shared with the cached Geneformer run.
 
 Tolerances: ±0.005 on F1/GSI/MHR/ARI/NMI, ±1 on counts (±0.01 on purity, ±5 % on the purity z,
-whose null has 10 draws). T10-T12 (interface test, LR screen, matched radius) are placeholders for
-the next spatial stages.
+whose null has 10 draws). T10 (interface test) runs the library on the cached niche-labelled h5ads of the three
+CosMx models and reads the `interfaces` stage of the paper run; the partner-marker tercile and marker-excluded
+checks run on the cached calls of the three models. T11-T12 (LR screen, matched radius) are placeholders.
 """
 from __future__ import annotations
 
@@ -27,13 +28,28 @@ from repro_support import cached_path, check, dev_table, report
 from expected import EXPECTED, PRIMARY, SPATIAL_COSMX_SCGPT
 
 from interpretfm.cells import RetentionRule, select_features
+from interpretfm.interfaces import (
+    InterfaceParams,
+    adjust_score,
+    cell_area,
+    covariates,
+    fired_on_sets,
+    group_labels,
+    interface_test,
+    load_group_map,
+    marker_excluded_calls,
+    markers_by_group,
+    partner_marker_tercile,
+    partner_markers,
+    program_score,
+)
 from interpretfm.niche_concepts import cross_model_jaccard, match_niches, niche_composition, niche_feature_tests, top_concepts
 from interpretfm.niches import label_agreement, label_composition, radius_to_native, select_config
 
 CELL_STAGES = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells"]
 NICHE_STAGES = CELL_STAGES + ["layers", "niches"]
 SPS = ("reconstruction", "spatial_sparse")
-SPATIAL_TODO = "TODO: needs the interface and ligand-receptor stages (P2-B/C); expected values are in expected.SPATIAL_COSMX_SCGPT"
+SPATIAL_TODO = "TODO: needs the ligand-receptor screen and matched-radius stage (P2-C); expected values are in expected.SPATIAL_COSMX_SCGPT"
 GENEFORMER_CACHE = ("geneformer", "layer_1", "r120p0_m_kmeans_k3")
 
 
@@ -348,10 +364,217 @@ def test_t13_niche_concept_labels(paper):
         check(f"{PRIMARY} T13 Jaccard", j, ej)
 
 
-# --- T10-T12: placeholders ------------------------------------------------------------------------
+# --- T10: calibrated interface test ---------------------------------------------------------------------
+
+INTERFACE_MODELS = {"scgpt": ("layer_1.norm2", "r100p0_xm_kmeans_k3"), "geneformer": ("layer_1", "r120p0_m_kmeans_k3"),
+                    "c2sscale": ("layer_13", "r100p0_m_kmeans_k3")}
+GROUPS_CSV = Path(__file__).resolve().parents[2] / "configs" / "paper" / "cosmx_author_groups.csv"
+
+
+def _cosmx_inputs():
+    """Dataset-level inputs of the interface test: covariates (bounding-box area), normalised author labels and their groups, symbols."""
+    exp = EXPECTED[PRIMARY]
+    a = _dataset(exp)
+    counts = a.X[:]
+    obs = a.obs
+    sym = a.var["feature_name"].astype(str).to_numpy()
+    coords = np.asarray(a.obsm["spatial"])[:, :2]
+    a.file.close()
+    cov = covariates(counts, cell_area(obs, {"product": ["Width", "Height"]}))
+    exact, group = group_labels(obs["author_cell_type"].astype(str).to_numpy(), load_group_map(GROUPS_CSV))
+    return {"counts": counts, "cov": cov, "exact": exact, "group": group, "symbols": sym, "coords": coords,
+            "params": InterfaceParams.from_um(0.18, edge_radius_um=21.6, block_um=21.6, legacy_tile_um=72.0, length_scales_um=[10.8, 27.0, 72.0])}
+
+
+def _cached_validation_adata(model: str):
+    layer, cfg_dir = INTERFACE_MODELS[model]
+    vdir = _cached_validation_dir(model, layer, cfg_dir)
+    if vdir is None or not (vdir / "adata_with_niche_labels.h5ad").exists():
+        pytest.skip(f"cached {model} niche-labelled validation h5ad not available")
+    import anndata as ad
+
+    return ad.read_h5ad(vdir / "adata_with_niche_labels.h5ad")
+
+
+def _cached_free_tables():
+    out = {}
+    for m in INTERFACE_MODELS:
+        p = cached_path(*SPS, "tables", f"strict_v2_cosmx_author_{m}_free.csv")
+        if p is None:
+            pytest.skip("cached strict-v2 niche-free tables not available")
+        out[m] = pd.read_csv(p)
+    return out
+
+
+def _expected_interfaces(model: str):
+    e = SPATIAL_COSMX_SCGPT["interfaces"]
+    return e if model == "scgpt" else SPATIAL_COSMX_SCGPT["interfaces_other_models"][model]
+
+
+def _check_interface_summary(label: str, s, e, cached=None, tol_pairs: int = 1, tol_share: float = 0.01, tol_effect: float = 0.005):
+    """The summary of one model against the manuscript (and the cached summary when given). The effect sizes
+    are medians/maxima over the niche-stratified pairs, so on another niche partition they take ``tol_effect``."""
+    cal, cs = s["calibration"], (cached or {}).get("calibration") or {}
+    check(f"{label} niche pairs", s["n_pairs_niche"], e["n_tests"], (cached or {}).get("n_pairs_niche"), tol=tol_pairs)
+    check(f"{label} share |z|>2, legacy tile null", s["frac_absz_gt2_v1"], e["share_abs_z_gt_2_tile"], (cached or {}).get("frac_absz_gt2_v1"), tol=tol_share)
+    check(f"{label} share |z|>2, calibrated", s["frac_absz_gt2_v2"], e["share_abs_z_gt_2_calibrated"], (cached or {}).get("frac_absz_gt2_v2"), tol=tol_share)
+    check(f"{label} enriched (niche)", s["n_supported_niche"].get("enriched", 0), e["enriched"], ((cached or {}).get("n_supported_niche") or {}).get("enriched", 0), tol=1)
+    check(f"{label} depleted (niche)", s["n_supported_niche"].get("depleted", 0), e["depleted"], ((cached or {}).get("n_supported_niche") or {}).get("depleted", 0), tol=1)
+    check(f"{label} z*", cal["zstar_niche"], e["z_star"], cs.get("zstar_niche"), tol=0.1)
+    nf = e["niche_free"]
+    check(f"{label} niche-free pairs", s["n_pairs_free"], nf["n_pairs"], (cached or {}).get("n_pairs_free"), tol=1)
+    check(f"{label} enriched (niche-free)", s["n_supported_free"].get("enriched", 0), nf["enriched"], ((cached or {}).get("n_supported_free") or {}).get("enriched", 0), tol=1)
+    check(f"{label} depleted (niche-free)", s["n_supported_free"].get("depleted", 0), nf["depleted"], ((cached or {}).get("n_supported_free") or {}).get("depleted", 0), tol=1)
+    if "fpr_pct" in e:
+        fpr = e["fpr_pct"]
+        check(f"{label} FPR smooth field, legacy null (%)", 100 * cal["v1"]["fpr_abs_z_gt2"], fpr[0], 100 * cs["v1"]["fpr_abs_z_gt2"] if cs else None, tol=1.0)
+        check(f"{label} FPR smooth field, calibrated null (%)", 100 * cal["v2n"]["fpr_abs_z_gt2"], fpr[1], 100 * cs["v2n"]["fpr_abs_z_gt2"] if cs else None, tol=1.0)
+        check(f"{label} FPR i.i.d. noise (%)", 100 * cal["iid_noise_v2n"]["fpr_abs_z_gt2"], fpr[2], 100 * cs["iid_noise_v2n"]["fpr_abs_z_gt2"] if cs else None, tol=1.0)
+    if "effect_median_pct" in e:
+        check(f"{label} median |effect| %", s["effect_pct_v2"]["median_abs"], e["effect_median_pct"], tol=tol_effect)
+        check(f"{label} max |effect| %", s["effect_pct_v2"]["max_abs"], e["effect_max_pct"], tol=tol_effect)
+        check(f"{label} neighbour correlation of P", cal["neighbour_corr_P"], 0.318, cs.get("neighbour_corr_P"), tol=0.005)
+        check(f"{label} neighbour correlation of P_adj", cal["neighbour_corr_Padj"], 0.071, cs.get("neighbour_corr_Padj"), tol=0.005)
+
+
+@pytest.mark.parametrize("model", list(INTERFACE_MODELS))
+def test_t10_interface_test_from_cache(model):
+    """The interface test (`interpretfm.interfaces.interface_test`) on the cached niche-labelled validation
+    h5ad of each CosMx model (the reference's input) reproduces the manuscript's summary table and the cached
+    pair tables (z within 1e-5, identical calls). About 20 s per model."""
+    exp = EXPECTED[PRIMARY]
+    inp = _cosmx_inputs()
+    b = _cached_validation_adata(model)
+    res = interface_test(b.X, np.asarray(b.obsm["spatial"])[:, :2], inp["exact"], inp["group"], b.obs["niche"].astype(str).to_numpy(), inp["cov"],
+                         inp["params"], model=model)
+    cached = cached_path(*SPS, "tables", "strict_v2_cosmx_author_summary.json")
+    cs = json.load(open(cached))[model] if cached else None
+    _check_interface_summary(f"{PRIMARY} T10 {model} (cache)", res["summary"], _expected_interfaces(model), cs)
+    for kind, name in (("niche", "niche"), ("free", "free")):
+        p = cached_path(*SPS, "tables", f"strict_v2_cosmx_author_{model}_{name}.csv")
+        if p is None:
+            continue
+        ref, mine = pd.read_csv(p), res[kind]
+        keys = ["niche", "group_a", "group_b", "n_edges"] if kind == "niche" else ["group_a", "group_b", "n_edges"]
+        assert len(mine) == len(ref) and (mine[keys].astype(str).to_numpy() == ref[keys].astype(str).to_numpy()).all()
+        zc, cc = ("z_v2", "call_v2") if kind == "niche" else ("z_v2_free", "call_v2_free")
+        dz = float(np.nanmax(np.abs(mine[zc].to_numpy() - ref[zc].to_numpy())))
+        report(f"{PRIMARY} T10 {model} max |Δz| vs the cached {name} table", dz, None, None, 1e-5)
+        assert dz < 1e-5 and (mine[cc].to_numpy() == ref[cc].to_numpy()).all()
+    if model == "scgpt":
+        exp_layer = exp["layer"]
+        report(f"{PRIMARY} T10 layer", exp_layer, "layer_1.norm2")
+
+
+def test_t10_interface_test(paper):
+    """The `interfaces` stage of the paper run: the niche-free numbers and the calibration do not depend on
+    the niche partition and reproduce exactly; the niche-stratified numbers are computed on the pipeline's own
+    r100 niches (ARI 0.4175 vs the cached labels' 0.4187; see docs/reproducing.md), so pairs near the 50-edge
+    threshold, the shares and the median/maximum effect over the pairs can move: ±3 pairs, ±2 pp and ±0.05 on the
+    effect sizes are accepted and both values are printed."""
+    exp = EXPECTED[PRIMARY]
+    rd = paper.run_dir(PRIMARY, NICHE_STAGES + ["interfaces"])
+    s = json.load(open(rd / "11_interfaces" / exp["layer"] / "summary.json"))
+    p = s["params"]
+    assert p["edge_radius"] == 120.0 and p["block"] == 120.0 and p["legacy_tile"] == 400.0 and p["length_scales"] == [60.0, 150.0, 400.0]
+    assert s["niche_column"] == "niche_at_r18um/xm/kmeans/k3" and s["covariates"] == ["log_counts", "log_genes", "log_area"]
+    cached = cached_path(*SPS, "tables", "strict_v2_cosmx_author_summary.json")
+    cs = json.load(open(cached))["scgpt"] if cached else None
+    _check_interface_summary(f"{PRIMARY} T10 (interfaces stage, pipeline niches)", s, _expected_interfaces("scgpt"), cs, tol_pairs=3, tol_share=0.02,
+                             tol_effect=0.05)
+    free = pd.read_csv(rd / "11_interfaces" / exp["layer"] / "free_pairs.csv")
+    pf = cached_path(*SPS, "tables", "strict_v2_cosmx_author_scgpt_free.csv")
+    if pf is not None:
+        ref = pd.read_csv(pf)
+        dz = float(np.nanmax(np.abs(free["z_v2_free"].to_numpy() - ref["z_v2_free"].to_numpy())))
+        report(f"{PRIMARY} T10 max |Δz| of the niche-free pairs vs the cached table", dz, None, None, 1e-5)
+        assert dz < 1e-5 and (free["call_v2_free"].to_numpy() == ref["call_v2_free"].to_numpy()).all()
+    fo = rd / "11_interfaces" / exp["layer"] / "fired_on.csv"
+    pfo = cached_path("reconstruction", "readthrough_20261104", "P6_marker_excluded", "fired_on", "fired_on_cosmx__scgpt__layer_1_norm2.csv.gz")
+    if fo.exists() and pfo is not None:
+        mine = pd.read_csv(fo).set_index("feature")["fired_on_symbol"]
+        ref = pd.read_csv(pfo).set_index("feature")["fired_on_sym"].reindex(mine.index)
+        same = sum(set(str(a).split(";")) == set(str(b_).split(";")) for a, b_ in zip(mine, ref))
+        report(f"{PRIMARY} fired-on gene sets identical to the cached ones", same, len(mine), None, 0)
+        assert same == len(mine)
+
+
+# --- tercile and marker-excluded checks (three models) -----------------------------------------------------
+
+
+def _cached_fired_on(model: str, feats):
+    layer = INTERFACE_MODELS[model][0].replace(".", "_")
+    base = ("reconstruction", "readthrough_20261104", "P6_marker_excluded", "fired_on")
+    p = cached_path(*base, f"fired_on_cosmx__{model}__{layer}.csv.gz") or cached_path(*base, f"fired_on_cosmx__{model}__{layer}_all_latents.csv.gz")
+    if p is None:
+        pytest.skip(f"cached fired-on genes of {model} not available")
+    return fired_on_sets(pd.read_csv(p).set_index("feature").reindex(feats), "fired_on_sym")
+
+
+def test_partner_marker_tercile_and_marker_excluded_from_cache():
+    """Partner markers (top-10 Wilcoxon per author type, union per group), the partner-marker tercile over the
+    three models' cached niche-free calls (39 rows / 13 pairs, median g 0.071, CI [-0.770, 0.581], includes 0)
+    and the marker-excluded re-test (3 spillover-robust pairs; reduced-score median g -1.067, CI [-2.056, 0.079];
+    the full score on the same permutations equals the tercile primary row). About one minute."""
+    e_t, e_m = SPATIAL_COSMX_SCGPT["tercile"], SPATIAL_COSMX_SCGPT["marker_excluded"]
+    inp = _cosmx_inputs()
+    free = _cached_free_tables()
+    M = partner_markers(inp["counts"], inp["symbols"], inp["exact"], top_n=10)
+    by_group = markers_by_group(M, dict(zip(inp["exact"], inp["group"])))
+    cm = cached_path("reconstruction", "spatial_paperA", "tables", "a3_partner_markers_by_group.csv")
+    if cm is not None:
+        ref = pd.read_csv(cm)
+        same = sum(set(str(r.markers).split(";")) == by_group.get(r.group, set()) for r in ref.itertuples())
+        report(f"{PRIMARY} partner-marker sets identical to the cached table (groups)", same, len(ref), None, 0)
+        assert same == len(ref)
+    X, Padj, P, fired, concepts = {}, {}, {}, {}, {}
+    for m in INTERFACE_MODELS:
+        b = _cached_validation_adata(m)
+        X[m] = np.asarray(b.X)
+        P[m] = program_score(X[m])
+        Padj[m] = adjust_score(P[m], inp["exact"], inp["cov"])
+        fired[m] = _cached_fired_on(m, b.var["feature"].astype(int).to_numpy())
+        concepts[m] = b.var["concept"].astype(str).to_numpy()
+    rows, summ = partner_marker_tercile(free, Padj, inp["coords"], inp["exact"], inp["group"], inp["counts"], inp["symbols"], by_group, inp["params"], raw_scores=P)
+    prim = summ.iloc[0]
+    assert prim["primary"]
+    check(f"{PRIMARY} tercile rows", prim["n_rows"], e_t["n_rows"], tol=0)
+    check(f"{PRIMARY} tercile pairs", prim["n_pairs"], e_t["n_pairs"], tol=0)
+    check(f"{PRIMARY} tercile median g", prim["median_g"], e_t["median_g"])
+    check(f"{PRIMARY} tercile CI low", prim["ci_lo"], e_t["ci"][0])
+    check(f"{PRIMARY} tercile CI high", prim["ci_hi"], e_t["ci"][1])
+    report(f"{PRIMARY} tercile verdict", prim["verdict"], e_t["verdict"])
+    assert prim["verdict"] == e_t["verdict"]
+    res = marker_excluded_calls(free, X, fired, inp["coords"], inp["exact"], inp["group"], inp["cov"], inp["counts"], inp["symbols"], by_group,
+                                inp["params"], concept_names=concepts)
+    for m, c in res["controls"].items():
+        report(f"{PRIMARY} marker-excluded control {m}: max |Δz| vs the cached table, z* vs table", (c["max_abs_diff_z_v2_free"], c["zstar"], c["zstar_table"]))
+        assert c["max_abs_diff_z_v2_free"] < 1e-5 and abs(c["zstar"] - c["zstar_table"]) < 1e-6
+    V = res["verdicts"]
+    robust = tuple(sorted(V[V["spillover_robust"]]["pair"]))
+    check(f"{PRIMARY} marker-excluded pairs", len(V), e_m["n_pairs"], tol=0)
+    report(f"{PRIMARY} spillover-robust pairs", robust, tuple(sorted(e_m["robust"])))
+    assert robust == tuple(sorted(e_m["robust"]))
+    pv = cached_path("reconstruction", "readthrough_20261104", "P6_marker_excluded", "tables", "p6_cosmx_pair_verdicts.csv")
+    if pv is not None:
+        ref = pd.read_csv(pv).set_index("pair").reindex(V["pair"])
+        report(f"{PRIMARY} marker-excluded n_models_holding identical to the cached table", (V["n_models_holding"].to_numpy() == ref["n_models_holding"].to_numpy()).all(), True)
+        assert (V["n_models_holding"].to_numpy() == ref["n_models_holding"].to_numpy()).all()
+    TS = res["tercile_summary"]
+    red = TS[(TS["score"].str.startswith("reduced")) & (TS["set"] == "all called pairs x models")].iloc[0]
+    full = TS[(TS["score"].str.startswith("full")) & (TS["set"] == "all called pairs x models")].iloc[0]
+    check(f"{PRIMARY} marker-excluded reduced-score median g", red["median_g"], e_m["reduced_median_g"])
+    check(f"{PRIMARY} marker-excluded reduced-score CI low", red["ci_lo"], e_m["reduced_ci"][0])
+    check(f"{PRIMARY} marker-excluded reduced-score CI high", red["ci_hi"], e_m["reduced_ci"][1])
+    check(f"{PRIMARY} full score on the same permutations = tercile primary row (median g)", full["median_g"], prim["median_g"], tol=1e-9)
+    check(f"{PRIMARY} full score on the same permutations = tercile primary row (CI low)", full["ci_lo"], prim["ci_lo"], tol=1e-9)
+    check(f"{PRIMARY} full score on the same permutations = tercile primary row (CI high)", full["ci_hi"], prim["ci_hi"], tol=1e-9)
+
+
+# --- T11-T12: placeholders ------------------------------------------------------------------------
 
 
 @pytest.mark.skip(reason=SPATIAL_TODO)
-@pytest.mark.parametrize("key", ["interfaces", "lr_screen", "matched_radius"])
-def test_t10_to_t12_spatial(paper, key):
+@pytest.mark.parametrize("key", ["lr_screen", "matched_radius"])
+def test_t11_t12_spatial(paper, key):
     assert key in SPATIAL_COSMX_SCGPT and PRIMARY in EXPECTED
