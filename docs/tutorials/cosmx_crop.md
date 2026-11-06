@@ -534,7 +534,7 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     INFO niches: layer_1.norm2: label composition (at_model_config, r 21.6 µm, k 3): ARI 0.173 / NMI 0.232
 
 
-    INFO stage niches: done in 132.0 s
+    INFO stage niches: done in 108.0 s
 
 
     INFO stage interfaces: start (tutorial_run/runs/cosmx_crop/11_interfaces)
@@ -612,9 +612,9 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     interfaces  core   done          no valid cached result
     lr_screen   core   done          no valid cached result
     report      core   done          no valid cached result
-    finished in 135 s
+    finished in 111 s
     stage      status   duration_s  started                    error
-    ingest     done            0.0  2026-11-06T17:08:17+00:00  
+    ingest     done            0.0  2026-11-06T17:24:51+00:00  
     extract    -                                               
     tis        -                                               
     sae        -                                               
@@ -623,10 +623,10 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     gene_readout -                                               
     cells      -                                               
     layers     -                                               
-    niches     done          132.0  2026-11-06T17:08:17+00:00  
-    interfaces done            1.0  2026-11-06T17:10:29+00:00  
-    lr_screen  done            2.0  2026-11-06T17:10:30+00:00  
-    report     done            0.0  2026-11-06T17:10:32+00:00  
+    niches     done          108.0  2026-11-06T17:24:51+00:00  
+    interfaces done            1.0  2026-11-06T17:26:39+00:00  
+    lr_screen  done            2.0  2026-11-06T17:26:40+00:00  
+    report     done            0.0  2026-11-06T17:26:42+00:00  
 
 
 
@@ -758,9 +758,16 @@ axes[0].legend(fontsize=7, markerscale=3, frameon=False)
 ct = pd.crosstab(niche.dropna().astype(int), types[niche.notna()].values, normalize="index")
 ct[ct.sum().sort_values(ascending=False).index[:6]].plot.barh(ax=axes[1], stacked=True, width=0.7, fontsize=8)
 axes[1].set_xlabel("share of cells"); axes[1].set_ylabel("niche"); axes[1].legend(fontsize=7, frameon=False, loc="lower right"); axes[1].set_title("author cell types per niche")
-plt.tight_layout()
-plt.show()
+fig.tight_layout()
+display(fig)
+plt.close(fig)
 ```
+
+
+    
+![png](cosmx_crop_files/cosmx_crop_19_0.png)
+    
+
 
 The niche concept labels (`top_concepts.csv`) are the retained concepts whose feature scores are highest inside each niche relative to the rest (Wilcoxon, BH-adjusted), ranked by effect; they describe what the SAE features say about each niche.
 
@@ -891,8 +898,6 @@ pairs.sort_values("z_v2", key=np.abs, ascending=False).head(6)[["group_a", "grou
 ```
 
     2822 cells, 16672 contact edges at 21.599999999999998 µm; 3 niches (niche_at_r18um/xm/kmeans/k3)
-
-    
     pairs tested (niche-stratified / niche-free): {'niche': 65, 'free': 58}
     share |z| > 2: legacy tile null 0.138 | calibrated 0.015
     z*: {'niche': 2.04, 'free': 2.14} | false-positive rate on smooth fields: {'smooth_field_legacy': 0.103, 'smooth_field_calibrated': 0.057, 'smooth_field_free': 0.063, 'iid_noise': 0.062}
