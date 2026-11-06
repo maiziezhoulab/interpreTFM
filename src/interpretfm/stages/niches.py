@@ -178,7 +178,8 @@ def _row_dict(sel: Dict[str, Any]) -> Dict[str, Any]:
     return {k: sel[k] for k in keep if k in sel}
 
 
-@register_stage("niches", inputs=["ingest", "cells"], outputs=OUTPUTS, applies=lambda cfg: cfg.dataset.is_spatial, uses_labels=True)
+@register_stage("niches", inputs=["ingest", "cells"], outputs=OUTPUTS, applies=lambda cfg: cfg.dataset.is_spatial, uses_labels=True,
+                input_overrides={"cells": "cells_h5ad"})
 def run_niches(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Niche sweep, validation, expression-only and label-composition baselines, seed stability, concept labels."""
     import anndata as ad

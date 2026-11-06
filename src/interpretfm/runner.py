@@ -64,6 +64,7 @@ class Stage:
     doc: str = ""
     uses_labels: bool = False  #: whether the stage reads ``dataset.labels`` (then a label change invalidates its cache)
     hash_ignore: List[str] = field(default_factory=list)  #: stage parameters that cannot change the result (left out of the hash)
+    input_overrides: Dict[str, str] = field(default_factory=dict)  #: input stage -> stage parameter that replaces it when set
 
     def runs_in_model_env(self, cfg: Config) -> bool:
         """Whether the runner starts this stage in ``model.env`` for ``cfg`` (a model stage with an
@@ -84,7 +85,7 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
                    applies: Optional[Callable[[Config], bool]] = None, order: Optional[int] = None,
                    replace: bool = False, uses_labels: bool = False,
                    needs_model_env: Optional[Callable[[Config], bool]] = None,
-                   hash_ignore: Sequence[str] = (),
+                   hash_ignore: Sequence[str] = (), input_overrides: Optional[Dict[str, str]] = None,
                    ) -> Callable[[StageFunc], StageFunc]:
     """Decorator registering ``func`` as the implementation of stage ``name``.
 
@@ -99,6 +100,9 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
     (``extract`` with a cached store), and ``model.env: {}`` always runs in-process.
     ``hash_ignore`` names stage parameters that only change how the stage computes, never what
     (``n_jobs``, thread counts): they are left out of the stage's configuration hash.
+    ``input_overrides`` maps an input stage to the stage parameter that replaces its output
+    (``niches``: ``cells_h5ad`` instead of the ``cells`` stage); when that parameter is set, the
+    input stage need not have run.
     """
     if env not in ("core", "model"):
         raise ValueError(f"stage {name!r}: env must be 'core' or 'model', got {env!r}")
@@ -110,7 +114,8 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
         _REGISTRY[name] = Stage(name=name, func=func, inputs=list(inputs), outputs=list(outputs), env=env,
                                 applies=applies, needs_model_env=needs_model_env, order=pos,
                                 doc=(func.__doc__ or "").strip().splitlines()[0] if func.__doc__ else "",
-                                uses_labels=bool(uses_labels), hash_ignore=[str(k) for k in hash_ignore])
+                                uses_labels=bool(uses_labels), hash_ignore=[str(k) for k in hash_ignore],
+                                input_overrides=dict(input_overrides or {}))
         return func
 
     return deco
@@ -234,10 +239,13 @@ def plan(cfg: Config, stages: Optional[Iterable[str]] = None, force: bool = Fals
 # --- execution ----------------------------------------------------------------------------------
 
 
-def _check_inputs(st: Stage, run_dir: Path, done_now: set) -> None:
+def _check_inputs(st: Stage, run_dir: Path, done_now: set, cfg: Optional[Config] = None) -> None:
+    params = cfg.stage_params(st.name) if cfg is not None else {}
     for dep in st.inputs:
         if dep in done_now:
             continue
+        if dep in st.input_overrides and params.get(st.input_overrides[dep]):
+            continue  # the stage parameter supplies what the input stage would have produced
         m = StageManifest.read(stage_dir(run_dir, dep))
         if m is None or m.status not in ("done", "skipped"):
             raise StageError(f"stage {st.name!r} needs {dep!r}, which has not been run in {run_dir} "
@@ -370,7 +378,7 @@ def run(cfg: Config, stages: Optional[Iterable[str]] = None, force: bool = False
                 log.info("stage %s: cached (%s)", st.name, s["reason"])
                 done_now.add(st.name)
                 continue
-            _check_inputs(st, run_dir, done_now)
+            _check_inputs(st, run_dir, done_now, cfg)
             if st.runs_in_model_env(cfg):
                 m = _run_stage_in_model_env(cfg, st, run_dir)
             else:

@@ -1,7 +1,7 @@
 # Configuration reference
 
 :::{note}
-The v1 pipeline is in development. The configuration schema below is implemented and validated; every stage is implemented (see [running a pipeline](running.md)); the spatial stages cover the niches, the calibrated interface test and the model-free ligand–receptor screen.
+The configuration schema below is validated by `interpretfm validate`; every stage reads its section of it (see [running a pipeline](running.md)); the spatial stages cover the niches, the calibrated interface test and the model-free ligand–receptor screen.
 :::
 
 A run is described by one YAML file with five sections. Relative paths are resolved against the directory of the file. `interpretfm validate config.yaml` checks the schema and reports every problem at once, then checks that the referenced files exist.

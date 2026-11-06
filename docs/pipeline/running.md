@@ -1,7 +1,7 @@
 # Running a pipeline
 
 :::{note}
-In development. The command, the configuration, the runner and the stages `ingest`, `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers` and `report` work; `extract` runs from a cached activation store (`stages.extract.store_root`) or extracts scGPT and Geneformer activations in the model's own environment ([stage extract](stage_extract.md); C2S-Scale follows), and the spatial stages (`niches`, the calibrated interface test `interfaces` and the model-free ligand–receptor screen `lr_screen`) are skipped for a dataset without coordinates. `interpretfm.testing.write_toy_run(root, store=True)` writes a toy dataset, a synthetic activation store and a configuration that runs every implemented stage on a CPU in seconds. The 0.9 module entry points (`python -m interp_pipeline....`, [usage](../usage.md)) are unchanged.
+The command, the configuration, the runner and every stage are described here: `ingest`, `extract` (from a cached activation store through `stages.extract.store_root`, or extraction of scGPT, Geneformer and C2S-Scale activations in the model's own environment, [stage extract](stage_extract.md)), `tis`, `sae`, `concepts`, `concept_eval`, `gene_readout`, `cells`, `layers`, the spatial stages `niches`, `interfaces` and `lr_screen`, and `report`.
 :::
 
 ## The command
@@ -14,6 +14,8 @@ interpretfm run config.yaml --stages ingest,extract,tis
 interpretfm run config.yaml --stages tis --force # re-run even when cached
 interpretfm status runs/cosmx_scgpt              # one line per stage from the manifests
 interpretfm report runs/cosmx_scgpt              # (re)build report.json and report.html from the finished stages
+interpretfm hub export runs/cosmx_scgpt export/   # the selected SAEs as a Hugging Face-ready folder (see stage sae)
+interpretfm hub verify runs/cosmx_scgpt export/   # every exported SAE reloads bit-identically
 interpretfm version
 ```
 

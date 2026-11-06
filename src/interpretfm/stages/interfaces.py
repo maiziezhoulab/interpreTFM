@@ -158,7 +158,7 @@ def _fired_on(ctx: StageContext, layer: str, feats, genes: GeneTable, fo: Dict[s
 
 
 @register_stage("interfaces", inputs=["ingest", "extract", "cells", "niches"], outputs=OUTPUTS, applies=lambda cfg: cfg.dataset.is_spatial,
-                uses_labels=True)
+                uses_labels=True, input_overrides={"cells": "cells_h5ad", "extract": "cells_h5ad"})
 def run_interfaces(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Calibrated interface test with the legacy tile test, niche-free variant, partner markers and fired-on genes."""
     import anndata as ad

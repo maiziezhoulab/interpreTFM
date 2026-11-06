@@ -59,6 +59,16 @@ def _parser() -> argparse.ArgumentParser:
     ex.add_argument("--layers", help="expected model.layers, comma-separated (checked against the configuration)")
     ex.add_argument("--env-file", help="KEY=VALUE file supplying ${NAME} placeholders of the configuration")
 
+    hb = sub.add_parser("hub", help="export trained SAEs to a Hugging Face-ready folder, or check such a folder")
+    hsub = hb.add_subparsers(dest="hub_command", metavar="subcommand")
+    hsub.required = True
+    he = hsub.add_parser("export", help="write <out_dir>/<model>/<dataset>/<layer>/ (safetensors, config, features, metrics, model card) per run")
+    he.add_argument("run_dirs", nargs="+", metavar="run_dir", help="finished run directories (the last argument is out_dir)")
+    he.add_argument("--layers", help="comma-separated subset of model.layers (default: all)")
+    he.add_argument("--repo-id", default=None, help="repository id written into the cards (default: a placeholder)")
+    hv = hsub.add_parser("verify", help="reload every exported layer of the runs and compare it with the run's checkpoint")
+    hv.add_argument("run_dirs", nargs="+", metavar="run_dir", help="run directories (the last argument is the export folder)")
+
     st = sub.add_parser("stage", help=argparse.SUPPRESS)
     st.add_argument("name")
     st.add_argument("--config", required=True)
@@ -182,6 +192,27 @@ def cmd_extract(args) -> int:
     return 0
 
 
+def cmd_hub(args) -> int:
+    from interpretfm import hub
+
+    *run_dirs, out_dir = args.run_dirs
+    if not run_dirs:
+        print("hub: give at least one run directory and the output folder", file=sys.stderr)
+        return 2
+    if args.hub_command == "export":
+        layers = [s.strip() for s in args.layers.split(",")] if args.layers else None
+        repo_id = args.repo_id or hub.DEFAULT_REPO
+        for rd in run_dirs:
+            for d in hub.export_run(rd, out_dir, layers=layers, repo_id=repo_id):
+                print(f"exported {d}")
+        print(f"index {hub.write_index(out_dir, repo_id=repo_id)}")
+        return 0
+    rows = hub.verify_export(out_dir, run_dirs)
+    for r in rows:
+        print(f"{r['model']:12s} {r['dataset']:8s} {r['layer']:16s} {'identical' if r['identical'] else 'DIFFERENT'}  ({', '.join(r['tensors'])})")
+    return 0 if rows and all(r["identical"] for r in rows) else 1
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     args = _parser().parse_args(argv)
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -190,7 +221,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(__version__)
         return 0
     return {"validate": cmd_validate, "run": cmd_run, "status": cmd_status, "report": cmd_report,
-            "stage": cmd_stage, "extract": cmd_extract}[args.command](args)
+            "stage": cmd_stage, "extract": cmd_extract, "hub": cmd_hub}[args.command](args)
 
 
 if __name__ == "__main__":  # pragma: no cover

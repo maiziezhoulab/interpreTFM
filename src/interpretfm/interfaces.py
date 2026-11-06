@@ -526,6 +526,7 @@ def partner_markers(counts, genes: Sequence[str], labels: Sequence[Any], top_n: 
     (scanpy ``rank_genes_groups``, ``tie_correct=False``, ranked by the test score).
 
     Returns one row per (label, rank): ``label, n_cells, rank, gene, wilcoxon_score, logfoldchange, pval_adj``.
+    Labels with a single cell get no markers (the test needs at least two cells per group).
     """
     import anndata as ad
     import scanpy as sc
@@ -539,10 +540,15 @@ def partner_markers(counts, genes: Sequence[str], labels: Sequence[Any], top_n: 
     sc.pp.normalize_total(b, target_sum=1e4)
     sc.pp.log1p(b)
     b.obs["label"] = b.obs["label"].astype("category")
-    sc.tl.rank_genes_groups(b, groupby="label", method="wilcoxon", reference="rest", use_raw=False, tie_correct=False, n_genes=b.n_vars)
+    counts_per_label = b.obs["label"].value_counts()
+    groups = [t for t in b.obs["label"].cat.categories if counts_per_label[t] >= 2]
+    if not groups:
+        return pd.DataFrame(columns=["label", "n_cells", "rank", "gene", "wilcoxon_score", "logfoldchange", "pval_adj"])
+    sc.tl.rank_genes_groups(b, groupby="label", groups=groups, method="wilcoxon", reference="rest", use_raw=False, tie_correct=False,
+                            n_genes=b.n_vars)
     res = b.uns["rank_genes_groups"]
     rows = []
-    for t in b.obs["label"].cat.categories:
+    for t in groups:
         n = int((b.obs["label"] == t).sum())
         for r in range(min(int(top_n), b.n_vars)):
             rows.append({"label": t, "n_cells": n, "rank": r + 1, "gene": str(res["names"][t][r]),
