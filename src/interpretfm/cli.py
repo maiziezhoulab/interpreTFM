@@ -62,7 +62,7 @@ def _parser() -> argparse.ArgumentParser:
     hb = sub.add_parser("hub", help="export trained SAEs to a Hugging Face-ready folder, or check such a folder")
     hsub = hb.add_subparsers(dest="hub_command", metavar="subcommand")
     hsub.required = True
-    he = hsub.add_parser("export", help="write <out_dir>/<model>/<layer>/ (safetensors, config, features, metrics, model card) per run")
+    he = hsub.add_parser("export", help="write <out_dir>/<model>/<dataset>/<layer>/ (safetensors, config, features, metrics, model card) per run")
     he.add_argument("run_dirs", nargs="+", metavar="run_dir", help="finished run directories (the last argument is out_dir)")
     he.add_argument("--layers", help="comma-separated subset of model.layers (default: all)")
     he.add_argument("--repo-id", default=None, help="repository id written into the cards (default: a placeholder)")
@@ -209,7 +209,7 @@ def cmd_hub(args) -> int:
         return 0
     rows = hub.verify_export(out_dir, run_dirs)
     for r in rows:
-        print(f"{r['model']:12s} {r['layer']:16s} {'identical' if r['identical'] else 'DIFFERENT'}  ({', '.join(r['tensors'])})")
+        print(f"{r['model']:12s} {r['dataset']:8s} {r['layer']:16s} {'identical' if r['identical'] else 'DIFFERENT'}  ({', '.join(r['tensors'])})")
     return 0 if rows and all(r["identical"] for r in rows) else 1
 
 

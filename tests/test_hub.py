@@ -46,7 +46,7 @@ def test_export_reload_identical_and_public(tmp_path):
     run = _fake_run(tmp_path)
     out = tmp_path / "export"
     assert main(["hub", "export", str(run), str(out), "--repo-id", "user/interpretfm-test"]) == 0
-    d = out / "scgpt" / "layer_1.norm2"
+    d = out / "scgpt" / "cosmx" / "layer_1.norm2"
     assert {p.name for p in d.iterdir()} == set(hub.LAYER_FILES)
     assert (out / "README.md").exists()
     ckpt = hub.load_sae(out, "scgpt", "layer_1.norm2")
@@ -62,6 +62,9 @@ def test_export_reload_identical_and_public(tmp_path):
         assert str(tmp_path) not in p.read_text()
     assert main(["hub", "verify", str(run), str(out)]) == 0
     assert hub.load_features(out, "scgpt", "layer_1.norm2").shape[0] == 1
+    assert hub.layer_dir(out, "scgpt", "layer_1.norm2", dataset="cosmx") == d
+    with pytest.raises(FileNotFoundError):
+        hub.layer_dir(out, "scgpt", "layer_1.norm2", dataset="xenium")
 
 
 def test_load_sae_missing_layer(tmp_path):

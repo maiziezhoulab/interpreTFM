@@ -1,6 +1,7 @@
 """Export of trained SAEs to a Hugging Face-style folder and loading from it (``interpretfm hub``).
 
-One exported layer is a folder ``<out_dir>/<model>/<layer>/`` with
+One exported layer is a folder ``<out_dir>/<model>/<dataset>/<layer>/`` (the dataset is the
+prefix of the run name, ``cosmx`` or ``xenium`` for the manuscript's runs) with
 
 - ``sae.safetensors``: the checkpoint's tensors (``encoder.weight``, ``encoder.bias``, ``bias``,
   ``decoder.weight``), float32 as trained;
@@ -55,9 +56,15 @@ DATASETS: Dict[str, str] = {
 }
 
 
-def layer_folder(model: str, layer: str) -> str:
-    """Relative folder of one exported layer inside the export (``<model>/<layer>``)."""
-    return f"{model}/{layer}"
+def layer_folder(model: str, layer: str, dataset: str) -> str:
+    """Relative folder of one exported layer inside the export (``<model>/<dataset>/<layer>``)."""
+    return f"{model}/{dataset}/{layer}"
+
+
+def dataset_key(run_name: str) -> str:
+    """The dataset folder of a run: the known dataset prefix of the run name, else its first ``_``-separated part."""
+    low = run_name.lower()
+    return next((k for k in DATASETS if low.startswith(k)), low.split("_")[0] or low)
 
 
 # --- reading a run directory -----------------------------------------------------------------
@@ -155,7 +162,7 @@ def collect_layer(run_dir: Union[str, Path], layer: str) -> Dict[str, Any]:
     sae_params = (cfg.get("stages") or {}).get("sae") or {}
     sae_params = _public({k: v for k, v in sae_params.items() if k not in ("checkpoints", "device")})
     run_name = cfg["run"]["name"]
-    dataset_key = next((k for k in DATASETS if run_name.lower().startswith(k)), None)
+    ds_key = dataset_key(run_name)
     metrics = {
         "sae_qc": {"lambda": lam, "rule": sae_sel.get("rule"), "grid": sae_sel.get("grid"),
                    **_pick(qc, "n_rows", "fvu", "l0_mean", "l0_frac", "dead_frac", "checkpoint_step"),
@@ -174,7 +181,7 @@ def collect_layer(run_dir: Union[str, Path], layer: str) -> Dict[str, Any]:
     return {
         "run_name": run_name, "model": model, "layer": layer, "representative_layer": cfg["model"].get("representative_layer"),
         "checkpoint": ckpt_path, "features_csv": features_csv if features_csv.exists() else None,
-        "dataset": {"name": DATASETS.get(dataset_key, run_name), "key": dataset_key, "file": Path(cfg["dataset"]["h5ad"]).name,
+        "dataset": {"name": DATASETS.get(ds_key, run_name), "key": ds_key, "file": Path(cfg["dataset"]["h5ad"]).name,
                     "um_per_unit": (cfg["dataset"].get("spatial") or {}).get("um_per_unit"),
                     "labels": (cfg["dataset"].get("labels") or {}).get("column")},
         "model_checkpoint": Path(cfg["model"]["checkpoint"]).name if cfg["model"].get("checkpoint") else None,
@@ -199,7 +206,7 @@ def export_layer(run_dir: Union[str, Path], layer: str, out_dir: Union[str, Path
 
     info = collect_layer(run_dir, layer)
     ckpt = load_checkpoint(info["checkpoint"])
-    dest = Path(out_dir) / layer_folder(info["model"], layer)
+    dest = Path(out_dir) / layer_folder(info["model"], layer, info["dataset"]["key"])
     dest.mkdir(parents=True, exist_ok=True)
     state = _tensor_state(ckpt)
     save_file(state, str(dest / SAE_FILE), metadata={"format": "pt", "interpretfm": __version__, "model": info["model"],
@@ -241,25 +248,26 @@ def write_index(out_dir: Union[str, Path], repo_id: str = DEFAULT_REPO) -> Path:
     """Top-level ``README.md`` of the export: one row per exported layer."""
     out_dir = Path(out_dir)
     rows = []
-    for cfg_path in sorted(out_dir.glob(f"*/*/{CONFIG_FILE}")):
+    for cfg_path in sorted(out_dir.glob(f"*/*/*/{CONFIG_FILE}")):
         with open(cfg_path) as fh:
             c = json.load(fh)
         m = _read_json(cfg_path.parent / METRICS_FILE) or {}
         f1 = m.get("concept_f1", {})
-        rows.append((c["model"], c["layer"], c["dataset"]["name"].split(" (")[0], c["d_in"], c["n_latents"],
+        rows.append((c["model"], c["dataset"]["key"], c["layer"], c["dataset"]["name"].split(" (")[0], c["d_in"], c["n_latents"],
                      _fmt(m.get("sae_qc", {}).get("fvu")), _fmt(f1.get("row_sae", {}).get("concept_f1")),
-                     _fmt(f1.get("row_raw", {}).get("concept_f1")), m.get("features", {}).get("n_features")))
+                     _fmt(f1.get("row_raw", {}).get("concept_f1")), m.get("features", {}).get("n_features") or "–"))
     lines = ["---", "license: gpl-3.0", "library_name: interpretfm", "tags:", "  - sparse-autoencoder", "  - single-cell",
              "  - spatial-transcriptomics", "  - interpretability", "---", "", "# interpreTFM: trained sparse autoencoders",
              "",
              "Sparse autoencoders (SAEs) trained on layer activations of transcriptomic foundation models by interpreTFM "
-             f"({__version__}), one folder per model and layer (`<model>/<layer>/`). Each folder holds the weights "
+             f"({__version__}), one folder per model, dataset and layer (`<model>/<dataset>/<layer>/`). Each folder holds the weights "
              "(`sae.safetensors`), `config.json`, the retained feature–concept table (`features.csv`), `metrics.json` and a "
              "model card. Load a layer with `interpretfm.hub.load_sae`:", "", "```python",
              "from interpretfm.hub import load_sae", "from interpretfm.sae import Encoder", "",
-             f'encoder = Encoder(load_sae("{repo_id}", model="{rows[0][0] if rows else "scgpt"}", layer="{rows[0][1] if rows else "layer_1.norm2"}"))',
-             "```", "", "| Model | Layer | Dataset | d_in | Features | FVU | Concept F1 (row split) | Raw dimensions | Retained features |",
-             "|---|---|---|---|---|---|---|---|---|"]
+             f'encoder = Encoder(load_sae("{repo_id}", model="{rows[0][0] if rows else "scgpt"}", '
+             f'layer="{rows[0][2] if rows else "layer_1.norm2"}", dataset="{rows[0][1] if rows else "cosmx"}"))',
+             "```", "", "| Model | Dataset | Layer | Section | d_in | Features | FVU | Concept F1 (row split) | Raw dimensions | Retained features |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         lines.append("| " + " | ".join(str(x) for x in r) + " |")
     lines += ["", "Licence: GPL-3.0-or-later (the licence of interpreTFM). The base models and datasets keep their own licences; "
@@ -350,7 +358,8 @@ def model_card(info: Dict[str, Any], config: Dict[str, Any]) -> str:
         "Cite the interpreTFM manuscript (in preparation) and the software release (`CITATION.cff` of the repository, "
         "<https://github.com/OliiverHu/interpreTFM>).", "",
         "## Loading", "", "```python", "from interpretfm.hub import load_sae", "from interpretfm.sae import Encoder", "",
-        f'ckpt = load_sae("{config.get("repo_id", DEFAULT_REPO)}", model="{info["model"]}", layer="{info["layer"]}")  # or a local export folder',
+        f'ckpt = load_sae("{config.get("repo_id", DEFAULT_REPO)}", model="{info["model"]}", layer="{info["layer"]}", '
+        f'dataset="{ds["key"]}")  # or a local export folder',
         "encoder = Encoder(ckpt)          # encoder.encode(x) -> features", "```", "",
     ]
     return "\n".join(lines)
@@ -359,49 +368,59 @@ def model_card(info: Dict[str, Any], config: Dict[str, Any]) -> str:
 # --- loading -----------------------------------------------------------------------------------
 
 
-def layer_dir(repo_or_path: Union[str, Path], model: str, layer: str, revision: Optional[str] = None,
-              cache_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Local folder of one exported layer: ``<repo_or_path>/<model>/<layer>`` when that exists, otherwise the
-    layer's files of the Hugging Face repository ``repo_or_path`` (downloaded with ``huggingface_hub``)."""
-    local = Path(repo_or_path) / layer_folder(model, layer)
-    if local.is_dir():
+def _find_layer(root: Path, model: str, layer: str, dataset: Optional[str]) -> Path:
+    if dataset is not None:
+        local = root / layer_folder(model, layer, dataset)
+        if not local.is_dir():
+            raise FileNotFoundError(f"{root}: no exported layer at {local}")
         return local
-    if Path(repo_or_path).exists():
-        raise FileNotFoundError(f"{repo_or_path}: no exported layer at {local}")
+    found = sorted(p for p in root.glob(f"{model}/*/{layer}") if p.is_dir())
+    if len(found) == 1:
+        return found[0]
+    if not found:
+        raise FileNotFoundError(f"{root}: no exported layer {model}/*/{layer}")
+    raise ValueError(f"{root}: {model}/{layer} exists for several datasets ({', '.join(p.parent.name for p in found)}); pass dataset=...")
+
+
+def layer_dir(repo_or_path: Union[str, Path], model: str, layer: str, dataset: Optional[str] = None,
+              revision: Optional[str] = None, cache_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Local folder of one exported layer: ``<repo_or_path>/<model>/<dataset>/<layer>`` when ``repo_or_path`` is a
+    folder, otherwise the layer's files of the Hugging Face repository ``repo_or_path`` (downloaded with
+    ``huggingface_hub``). ``dataset`` may be left out when the model's layer was exported for one dataset only."""
+    root = Path(repo_or_path)
+    if root.exists():
+        return _find_layer(root, model, layer, dataset)
     if str(repo_or_path) == DEFAULT_REPO:
         raise ValueError(f"the repository id is the placeholder {DEFAULT_REPO!r}; pass the published repository or a local folder")
     try:
         from huggingface_hub import snapshot_download
     except ImportError as e:  # pragma: no cover
         raise ImportError("loading from the Hugging Face Hub needs the huggingface_hub package (pip install huggingface_hub)") from e
-    root = snapshot_download(repo_id=str(repo_or_path), revision=revision, cache_dir=cache_dir,
-                             allow_patterns=[f"{layer_folder(model, layer)}/*"])
-    local = Path(root) / layer_folder(model, layer)
-    if not local.is_dir():
-        raise FileNotFoundError(f"{repo_or_path}: no folder {layer_folder(model, layer)} in the repository")
-    return local
+    pattern = layer_folder(model, layer, dataset or "*")
+    snap = snapshot_download(repo_id=str(repo_or_path), revision=revision, cache_dir=cache_dir, allow_patterns=[f"{pattern}/*"])
+    return _find_layer(Path(snap), model, layer, dataset)
 
 
-def load_sae(repo_or_path: Union[str, Path], model: str, layer: str, revision: Optional[str] = None,
-             cache_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+def load_sae(repo_or_path: Union[str, Path], model: str, layer: str, dataset: Optional[str] = None,
+             revision: Optional[str] = None, cache_dir: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """Load one exported SAE as a checkpoint dict (``state_dict``, ``d_in``, ``n_latents``, ``spec``,
     ``input_scale``, ``architecture``, ``summary``) that :class:`interpretfm.sae.Encoder` accepts."""
     from safetensors.torch import load_file
 
-    d = layer_dir(repo_or_path, model, layer, revision=revision, cache_dir=cache_dir)
+    d = layer_dir(repo_or_path, model, layer, dataset=dataset, revision=revision, cache_dir=cache_dir)
     with open(d / CONFIG_FILE) as fh:
         config = json.load(fh)
     state = load_file(str(d / SAE_FILE))
     return {"state_dict": state, "d_in": int(config["d_in"]), "n_latents": int(config["n_latents"]), "spec": config.get("spec"),
             "input_scale": config.get("input_scale"), "architecture": config.get("architecture"), "summary": config.get("summary"),
-            "hub": {"model": config["model"], "layer": config["layer"], "dir": str(d)}}
+            "hub": {"model": config["model"], "layer": config["layer"], "dataset": config["dataset"].get("key"), "dir": str(d)}}
 
 
-def load_features(repo_or_path: Union[str, Path], model: str, layer: str, **kw):
+def load_features(repo_or_path: Union[str, Path], model: str, layer: str, dataset: Optional[str] = None, **kw):
     """The retained feature–concept table of one exported layer (a pandas DataFrame)."""
     import pandas as pd
 
-    return pd.read_csv(layer_dir(repo_or_path, model, layer, **kw) / FEATURES_FILE)
+    return pd.read_csv(layer_dir(repo_or_path, model, layer, dataset=dataset, **kw) / FEATURES_FILE)
 
 
 def verify_export(out_dir: Union[str, Path], run_dirs: Sequence[Union[str, Path]]) -> List[Dict[str, Any]]:
@@ -417,10 +436,10 @@ def verify_export(out_dir: Union[str, Path], run_dirs: Sequence[Union[str, Path]
         for layer in cfg["model"]["layers"]:
             info = collect_layer(rd, layer)
             ref = load_checkpoint(info["checkpoint"])
-            got = load_sae(out_dir, info["model"], layer)
+            got = load_sae(out_dir, info["model"], layer, dataset=info["dataset"]["key"])
             same = set(ref["state_dict"]) == set(got["state_dict"]) and all(
                 torch.equal(ref["state_dict"][k].cpu(), got["state_dict"][k]) for k in ref["state_dict"])
             meta = int(ref["d_in"]) == got["d_in"] and int(ref["n_latents"]) == got["n_latents"] and ref.get("input_scale") == got["input_scale"]
-            out.append({"run": str(rd), "model": info["model"], "layer": layer, "identical": bool(same and meta),
+            out.append({"run": str(rd), "model": info["model"], "dataset": info["dataset"]["key"], "layer": layer, "identical": bool(same and meta),
                         "tensors": sorted(ref["state_dict"])})
     return out
