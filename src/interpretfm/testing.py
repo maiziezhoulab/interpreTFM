@@ -45,11 +45,13 @@ def make_toy_adata(n_cells: int = 300, n_genes: int = 50, n_types: int = 3, seed
 
 def toy_config_dict(h5ad: Union[str, Path], out_dir: Union[str, Path], spatial: bool = True,
                     env: Optional[Dict[str, Any]] = None, store_root: Optional[Union[str, Path]] = None,
-                    concepts_csv: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
+                    concepts_csv: Optional[Union[str, Path]] = None, lr_database: Optional[Union[str, Path]] = None,
+                    lr_complexes: Optional[Union[str, Path]] = None) -> Dict[str, Any]:
     """The configuration mapping for a toy run (paths as given; use absolute paths or paths relative to the YAML).
 
     With ``store_root`` the model-level stages are configured too (:func:`toy_stage_params`):
-    ``extract`` uses that cached store and ``concepts`` loads ``concepts_csv`` offline.
+    ``extract`` uses that cached store, ``concepts`` loads ``concepts_csv`` offline and ``lr_screen``
+    screens the pairs of ``lr_database`` (with the complexes of ``lr_complexes``).
     """
     cfg: Dict[str, Any] = {
         "run": {"name": "toy", "out_dir": str(out_dir), "seed": 0},
@@ -76,11 +78,12 @@ def toy_config_dict(h5ad: Union[str, Path], out_dir: Union[str, Path], spatial: 
         cfg["dataset"]["spatial"] = {"obsm": "spatial", "um_per_unit": TOY_UM_PER_UNIT}
     if store_root is not None:
         cfg["stages"]["extract"]["store_root"] = str(store_root)
-        cfg["stages"].update(toy_stage_params(concepts_csv))
+        cfg["stages"].update(toy_stage_params(concepts_csv, lr_database, lr_complexes))
     return cfg
 
 
-def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None) -> Dict[str, Dict[str, Any]]:
+def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None, lr_database: Optional[Union[str, Path]] = None,
+                     lr_complexes: Optional[Union[str, Path]] = None) -> Dict[str, Dict[str, Any]]:
     """Tiny settings for the model-level stages so that the toy pipeline runs on a CPU in seconds."""
     params: Dict[str, Dict[str, Any]] = {
         "tis": {"trials": 40, "k_ref": 8, "controls": ["shuffle", "pca"]},
@@ -97,10 +100,33 @@ def toy_stage_params(concepts_csv: Optional[Union[str, Path]] = None) -> Dict[st
                    "fixed_configs": [{"radius_um": 12.0, "space": "m", "method": "kmeans", "k": 2}]},
         "interfaces": {"edge_radius_um": 12.0, "block_um": 25.0, "min_edges": 5, "n_perm": 20, "calib_perm": 10, "calib_reps": 1,
                        "legacy_perm": 5, "markers": {"top_n": 3}, "fired_on": {"max_shards": 2}},
+        "lr_screen": {"radius_um": 12.0, "thresholds": [1, 2], "n_perm": 20, "seed": 0, "min_positive": 10},
     }
     if concepts_csv is not None:
         params["concepts"]["offline_matrix"] = str(concepts_csv)
+    if lr_database is not None:
+        params["lr_screen"]["database"] = str(lr_database)
+        params["lr_screen"]["complexes"] = str(lr_complexes) if lr_complexes is not None else False
     return params
+
+
+def make_toy_lr_database(adata, n_pairs: int = 6, seed: int = 0):
+    """A small ligand–receptor table over the toy panel (``pandas.DataFrame`` in the CellChatDB layout) and a
+    complex table with one two-subunit receptor complex (``RC``), so that complex resolution is exercised."""
+    import pandas as pd
+
+    rng = np.random.default_rng(seed + 23)
+    genes = [str(g) for g in adata.var_names]
+    pick = rng.choice(len(genes), size=2 * n_pairs + 2, replace=False)
+    rows = []
+    for k in range(n_pairs):
+        lg, rg = genes[pick[2 * k]], genes[pick[2 * k + 1]]
+        rows.append({"interaction_name": f"{lg}_{rg}", "pathway_name": f"TOY{k % 2}", "ligand": lg, "receptor": rg, "annotation": "Cell-Cell Contact"})
+    rows.append({"interaction_name": f"{genes[pick[0]]}_RC", "pathway_name": "TOY2", "ligand": genes[pick[0]], "receptor": "RC", "annotation": "Secreted Signaling"})
+    rows.append({"interaction_name": "NOTONPANEL_RC", "pathway_name": "TOY2", "ligand": "NOTONPANEL", "receptor": "RC", "annotation": "Secreted Signaling"})
+    db = pd.DataFrame(rows)
+    cx = pd.DataFrame([{"complex_name": "RC", "subunit_1": genes[pick[-2]], "subunit_2": genes[pick[-1]], "subunit_3": ""}])
+    return db, cx
 
 
 def make_toy_concepts(adata, n_concepts: int = 8, size_range: Tuple[int, int] = (5, 12), seed: int = 0):
@@ -178,8 +204,9 @@ def write_toy_run(root: Union[str, Path], n_cells: int = 300, n_genes: int = 50,
                   duplicate_cells: int = 0) -> Path:
     """Write ``<root>/data/toy.h5ad`` and ``<root>/toy.yaml`` (run directory ``<root>/runs/toy``); returns the YAML path.
 
-    ``store=True`` also writes a synthetic activation store (``data/store``) and concept table
-    (``data/concepts.csv``) and configures the model-level stages with tiny settings.
+    ``store=True`` also writes a synthetic activation store (``data/store``), a concept table
+    (``data/concepts.csv``) and a toy ligand–receptor table (``data/lr_pairs.csv``, ``data/lr_complexes.csv``)
+    and configures the model-level stages with tiny settings.
     """
     import yaml
 
@@ -187,7 +214,7 @@ def write_toy_run(root: Union[str, Path], n_cells: int = 300, n_genes: int = 50,
     (root / "data").mkdir(parents=True, exist_ok=True)
     adata = make_toy_adata(n_cells=n_cells, n_genes=n_genes, spatial=spatial)
     adata.write_h5ad(root / "data" / "toy.h5ad")
-    store_root = concepts_csv = None
+    store_root = concepts_csv = lr_db = lr_cx = None
     if store:
         concepts = make_toy_concepts(adata)
         concepts_csv = "data/concepts.csv"
@@ -195,8 +222,12 @@ def write_toy_run(root: Union[str, Path], n_cells: int = 300, n_genes: int = 50,
         store_root = root.resolve() / "data" / "store"
         write_toy_store(store_root, adata, hidden_dim=hidden_dim, concepts=concepts, duplicate_cells=duplicate_cells)
         concepts_csv = root.resolve() / concepts_csv  # stage parameters hold absolute paths
+        db, cx = make_toy_lr_database(adata)
+        lr_db, lr_cx = root.resolve() / "data" / "lr_pairs.csv", root.resolve() / "data" / "lr_complexes.csv"
+        db.to_csv(lr_db, index=False)
+        cx.to_csv(lr_cx, index=False)
     cfg = toy_config_dict("data/toy.h5ad", "runs/toy", spatial=spatial, env=env, store_root=store_root,
-                          concepts_csv=concepts_csv)
+                          concepts_csv=concepts_csv, lr_database=lr_db, lr_complexes=lr_cx)
     path = root / "toy.yaml"
     with open(path, "w") as fh:
         yaml.safe_dump(cfg, fh, sort_keys=False)

@@ -25,7 +25,7 @@ OUTPUTS = ["layer_table.csv", "recommendations.json"]
 UPSTREAM = ["tis", "sae", "concept_eval", "gene_readout", "cells"]
 
 
-@register_stage("layers", inputs=UPSTREAM, outputs=OUTPUTS)
+@register_stage("layers", inputs=UPSTREAM, outputs=OUTPUTS, uses_labels=True)
 def run_layers(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Per-criterion layer summary and best-layer notes (no composite score)."""
     cfg = ctx.config

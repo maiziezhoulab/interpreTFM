@@ -50,7 +50,7 @@ from interpretfm.units import adata_coords_um
 OUTPUTS = ["dataset_qc.json", "cells.csv"]
 
 
-@register_stage("ingest", inputs=[], outputs=OUTPUTS)
+@register_stage("ingest", inputs=[], outputs=OUTPUTS, uses_labels=True)
 def run_ingest(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Validate the dataset, flag low-quality cells, report vocabulary coverage and convert coordinates to µm."""
     import anndata as ad

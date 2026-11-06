@@ -15,10 +15,10 @@ runs/<name>/
     vocab_coverage.csv   when a vocabulary was found
     coords_um.csv        spatial data only: cell_index, x_um, y_um
   02_extract/<layer>/shard_*/   the activation store (unchanged 0.9 format), store.json
-  03_tis/ 04_sae/ 05_concepts/ 06_concept_eval/ 07_gene_readout/ 08_cells/ 09_layers/ 10_niches/ 11_interfaces/ 12_report/
+  03_tis/ 04_sae/ 05_concepts/ 06_concept_eval/ 07_gene_readout/ 08_cells/ 09_layers/ 10_niches/ 11_interfaces/ 12_lr_screen/ 13_report/
 ```
 
-Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The contents of each stage directory are listed on the stage pages ([ingest](stage_ingest.md), [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md), [cells](stage_cells.md), [layers](stage_layers.md), [niches](stage_niches.md), [interfaces](stage_interfaces.md), [report](stage_report.md)); the ligand–receptor screen of the [roadmap](../roadmap.md) is added next to `11_interfaces` when it is implemented.
+Stage directories are created when the stage first runs; `interpretfm status` lists every registered stage, with `-` for those not run yet. The contents of each stage directory are listed on the stage pages ([ingest](stage_ingest.md), [tis](stage_tis.md), [sae](stage_sae.md), [concepts](stage_concepts.md), [concept_eval](stage_concept_eval.md), [gene_readout](stage_gene_readout.md), [cells](stage_cells.md), [layers](stage_layers.md), [niches](stage_niches.md), [interfaces](stage_interfaces.md), [lr_screen](stage_lr_screen.md), [report](stage_report.md)).
 
 ## Stage manifest
 

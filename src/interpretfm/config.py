@@ -18,10 +18,10 @@ it works on Python 3.8–3.11 with PyYAML only). Sections:
     (optional JSON gene vocabulary, used by ``ingest`` to report gene coverage).
 ``stages``
     One mapping per stage name (``extract``, ``tis``, ``sae``, ``concepts``, ``cells``,
-    ``layers``, ``niches``, ``interfaces``, ``report``) holding that stage's parameters. The runner hashes the
-    section of a stage together with ``dataset``, ``model`` and ``run.seed`` to decide whether a
-    cached result is still valid; the stage implementation reads it through
-    :meth:`Config.stage_params`.
+    ``layers``, ``niches``, ``interfaces``, ``lr_screen``, ``report``) holding that stage's parameters. The runner hashes the
+    section of a stage together with ``dataset`` (without ``labels`` for the stages that do not
+    read labels), ``model`` and ``run.seed`` to decide whether a cached result is still valid; the
+    stage implementation reads it through :meth:`Config.stage_params`.
 ``output``
     ``html`` and ``json`` report switches and ``keep_store`` (whether the activation store is
     kept after the run).
@@ -63,7 +63,7 @@ import yaml
 
 #: Stage names in pipeline order. The runner numbers stage directories in this order.
 STAGE_ORDER = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers",
-               "niches", "interfaces", "report"]
+               "niches", "interfaces", "lr_screen", "report"]
 
 #: Stages that take parameters from the ``stages`` section (``ingest`` has none beyond ``dataset.qc``).
 PARAM_STAGES = [s for s in STAGE_ORDER if s != "ingest"]
@@ -396,16 +396,26 @@ class Config:
         d.pop("source", None)
         return _plain(d)
 
-    def stage_hash(self, stage: str) -> str:
+    def stage_hash(self, stage: str, uses_labels: Optional[bool] = None) -> str:
         """Hash of everything that can change the result of ``stage``.
 
         Covers the stage's own parameters, ``dataset``, ``model`` and ``run.seed``, so that a
         change to another stage's section, or to ``run.name``/``out_dir``, does not invalidate
-        a cached result.
+        a cached result. ``dataset.labels`` is left out for the stages that do not read labels
+        (``uses_labels``; by default the registered stage's declaration,
+        :func:`interpretfm.runner.stage_uses_labels`), so that changing the label column, file or
+        groups does not invalidate extraction, TIS, SAE training or the concept evaluation.
         """
         d = self.to_dict()
+        if uses_labels is None:
+            from interpretfm.runner import stage_uses_labels
+
+            uses_labels = stage_uses_labels(stage)
+        dataset = dict(d["dataset"])
+        if not uses_labels:
+            dataset.pop("labels", None)
         relevant = {
-            "dataset": d["dataset"],
+            "dataset": dataset,
             "model": d["model"],
             "seed": d["run"]["seed"],
             "stage": stage,

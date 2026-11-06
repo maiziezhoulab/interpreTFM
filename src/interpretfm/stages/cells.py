@@ -76,7 +76,7 @@ def _device(params: Dict[str, Any]):
     return torch.device(d)
 
 
-@register_stage("cells", inputs=["ingest", "extract", "sae", "concepts", "concept_eval"], outputs=OUTPUTS)
+@register_stage("cells", inputs=["ingest", "extract", "sae", "concepts", "concept_eval"], outputs=OUTPUTS, uses_labels=True)
 def run_cells(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Feature retention, projection to cells, and GSI excess / MHR@k against raw dimensions and single genes."""
     import anndata as ad

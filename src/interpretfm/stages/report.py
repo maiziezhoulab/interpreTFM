@@ -17,7 +17,7 @@ from interpretfm.runner import StageContext, register_stage
 OUTPUTS = ["report.json"]
 
 
-@register_stage("report", inputs=["ingest", "layers"], outputs=OUTPUTS)
+@register_stage("report", inputs=["ingest", "layers"], outputs=OUTPUTS, uses_labels=True)
 def run_report(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """HTML and JSON report with every metric next to its baseline."""
     cfg = ctx.config

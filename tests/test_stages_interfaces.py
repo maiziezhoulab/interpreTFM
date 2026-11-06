@@ -36,7 +36,7 @@ from interpretfm.runner import run, stage_dir
 from interpretfm.stages.interfaces import interface_params, read_interface_run
 from interpretfm.testing import make_toy_adata, toy_config_dict, write_toy_run
 
-ALL_STAGES = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers", "niches", "interfaces", "report"]
+ALL_STAGES = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers", "niches", "interfaces", "lr_screen", "report"]
 
 
 # --- fixtures ----------------------------------------------------------------------------------
@@ -101,7 +101,7 @@ def test_interface_stage_outputs(toy_run):
 
 def test_report_includes_interfaces(toy_run):
     r = json.loads((stage_dir(toy_run.run.out_dir, "report") / "report.json").read_text())
-    assert r["spatial"]["note"] == "niches: run; interfaces: run"
+    assert r["spatial"]["note"] == "niches: run; interfaces: run; lr_screen: run"
     e = r["interfaces"]["layer_1.norm2"]
     assert set(e["share_abs_z_gt2"]) == {"legacy_tile", "calibrated"} and e["z_star"]["niche"] >= 2.0 and e["z_star"]["free"] >= 2.0
     assert set(e["fpr"]) == {"smooth_field_legacy", "smooth_field_calibrated", "smooth_field_free", "iid_noise"}

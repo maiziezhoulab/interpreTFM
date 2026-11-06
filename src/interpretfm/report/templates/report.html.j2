@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>interpreTFM report: {{ run.name }}</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:#0b0b0b;background:#fcfcfb;
+margin:0;padding:0 16px 48px;line-height:1.45}main{max-width:1100px;margin:0 auto}h1{font-size:1.6rem;margin:28px 0 4px}
+h2{font-size:1.2rem;margin:32px 0 8px;border-bottom:1px solid #e6e5e2;padding-bottom:4px}h3{font-size:1rem;margin:18px 0 6px}
+p,li{font-size:0.95rem}.muted{color:#52514e;font-size:0.85rem}table{border-collapse:collapse;font-size:0.82rem;margin:8px 0;
+max-width:100%;display:block;overflow-x:auto}th,td{padding:4px 8px;border-bottom:1px solid #e6e5e2;text-align:right;
+white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f3f2ef;font-weight:600}
+.base{color:#52514e}.warn{background:#fff4e0;border-left:3px solid #eda100;padding:6px 10px;margin:6px 0;font-size:0.9rem}
+.note{background:#f3f2ef;border-left:3px solid #c3c2b7;padding:6px 10px;margin:6px 0 10px;font-size:0.88rem;color:#2f2e2c}
+.grid{display:flex;flex-wrap:wrap;gap:16px}.grid figure{margin:0;flex:1 1 320px;max-width:560px}figure img{width:100%;height:auto}
+figcaption{font-size:0.82rem;color:#52514e}code{font-size:0.85em;background:#f3f2ef;padding:1px 4px;border-radius:3px}
+</style>
+</head>
+<body><main>
+{% macro table(t) %}
+<table><thead><tr>{% for h in t.headers %}<th>{{ h }}</th>{% endfor %}</tr></thead><tbody>
+{% for row in t.rows %}<tr>{% for c in row %}<td{% if c.base %} class="base"{% endif %}>{{ c.value }}</td>{% endfor %}</tr>
+{% endfor %}</tbody></table>
+{% endmacro %}
+{% macro figs(names) %}
+{% if names %}<div class="grid">
+{% for name in names %}<figure><img alt="{{ captions.get(name, name) }}" src="data:image/png;base64,{{ figures[name] }}"><figcaption>{{ captions.get(name, name) }}</figcaption></figure>
+{% endfor %}</div>{% endif %}
+{% endmacro %}
+<h1>interpreTFM report: {{ run.name }}</h1>
+<p class="muted">model {{ model.name }}, layers {{ model.layers | join(', ') }}; representative layer {{ model.representative_layer }}; package {{ run.package_version }}; updated {{ run.updated }}; run directory <code>{{ run.run_dir }}</code></p>
+
+<h2>How to read this report</h2>
+{% for item in how_to_read %}
+<h3>{{ item.title }}</h3><p>{{ item.text }}</p>
+{% endfor %}
+
+<h2>Dataset and input checks</h2>
+<p class="note">{{ notes.dataset }}</p>
+{{ table(dataset_table) }}
+{% for w in warnings %}<div class="warn">{{ w }}</div>
+{% endfor %}
+
+<h2>Layers: every criterion next to its baselines</h2>
+<p class="note">{{ notes.layers }}</p>
+{% if recommendation_lines %}<ul>
+{% for line in recommendation_lines %}<li>{{ line }}</li>
+{% endfor %}</ul>{% endif %}
+{% if criterion_tables %}
+{% for c in criterion_tables %}
+<h3>{{ c.title }} <span class="muted">({{ c.note }})</span></h3>
+{{ table(c.table) }}
+{% endfor %}
+{% else %}
+<p class="warn">No layer table: run the <code>layers</code> stage.</p>
+{% endif %}
+{{ figs(layer_figures) }}
+
+{% if sae_table %}
+<h2>Sparse autoencoders</h2>
+<p class="note">{{ notes.sae }}</p>
+{{ table(sae_table) }}
+{% endif %}
+
+{% if cell_tables %}
+<h2>Cell-level features</h2>
+<p class="note">{{ notes.cells }}</p>
+{{ table(cell_tables.selection) }}
+{{ table(cell_tables.specificity) }}
+{% endif %}
+
+<h2>Spatial analyses</h2>
+<p>spatial: {{ spatial_note }}</p>
+
+<h3>Niches <span class="muted">(ARI/NMI against the dataset labels; purity against the tile-shuffle null)</span></h3>
+<p class="note">{{ notes.niches }}</p>
+{% if niches.table %}
+{{ table(niches.table) }}
+{{ figs(niches.figures) }}
+{% else %}
+<p>niches: {{ niches.status }}</p>
+{% endif %}
+
+<h3>Interfaces <span class="muted">(calibrated interface test; the legacy tile null and the smooth-field / noise false-positive shares are its baselines)</span></h3>
+<p class="note">{{ notes.interfaces }}</p>
+{% if interfaces.table %}
+{{ table(interfaces.table) }}
+{{ figs(interfaces.figures) }}
+{% else %}
+<p>interfaces: {{ interfaces.status }}</p>
+{% endif %}
+
+<h3>Ligand–receptor screen <span class="muted">(model-free co-localization screen; hits at both thresholds, robust hits, niche placement)</span></h3>
+<p class="note">{{ notes.lr_screen }}</p>
+{% if lr_screen.tables %}
+{{ table(lr_screen.tables.summary) }}
+{% if lr_screen.tables.hits.rows %}
+<h4 class="muted">Hits at the primary threshold, robust hits and placed pairs</h4>
+{{ table(lr_screen.tables.hits) }}
+{% else %}
+<p>No hit at the primary threshold.</p>
+{% endif %}
+{% for p in lr_screen.tables.placement %}
+{% if p.skipped %}
+<p>niche placement, {{ p.layer }}: skipped ({{ p.skipped }})</p>
+{% else %}
+<h4 class="muted">Niche placement, {{ p.layer }} (partition <code>{{ lr_screen.tables.niche_column }}</code>, {{ p.n_niches }} niches, {{ p.n_cells_with_niche }} cells with a niche label)</h4>
+{{ table(p.table) }}
+{% endif %}
+{% endfor %}
+{{ figs(lr_screen.figures) }}
+{% else %}
+<p>ligand–receptor screen: {{ lr_screen.status }}</p>
+{% endif %}
+
+<h2>Stages</h2>
+<p class="note">{{ notes.stages }}</p>
+{{ table(stages_table) }}
+<p class="muted">All numbers are in <code>report.json</code> next to this file.</p>
+</main></body></html>

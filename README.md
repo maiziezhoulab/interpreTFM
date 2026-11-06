@@ -54,7 +54,7 @@ Model weights, datasets and activation stores are not distributed with the code;
 
 ## Quick start
 
-**v1 pipeline (in development).** Version 1.0 runs every stage from one YAML configuration through the `interpretfm` command. The command, the configuration schema, the cached stage runner and the stages are in place (input checks, TIS, SAE training and selection, concept universe, held-out concept F1, gene-level readout, feature retention and projection, population specificity, the per-criterion layer table, spatial niches with their expression-only and label-composition baselines, and a self-contained HTML report); the interface test and the ligand–receptor screen follow, and extraction from a model runs from a cached activation store for now. Try it on a toy dataset:
+**v1 pipeline (in development).** Version 1.0 runs every stage from one YAML configuration through the `interpretfm` command. The command, the configuration schema, the cached stage runner and the stages are in place (input checks, TIS, SAE training and selection, concept universe, held-out concept F1, gene-level readout, feature retention and projection, population specificity, the per-criterion layer table, spatial niches with their expression-only and label-composition baselines, the calibrated interface test, the model-free ligand–receptor co-localization screen with its matched-neighbour radius, and a self-contained HTML report with every metric beside its baseline); extraction from a model runs from a cached activation store for now. Try it on a toy dataset:
 
 ```bash
 python -c "from interpretfm.testing import write_toy_run; write_toy_run('example')"

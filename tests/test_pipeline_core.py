@@ -151,7 +151,7 @@ def test_units():
 def test_registry_has_all_builtin_stages_in_order():
     names = [s.name for s in list_stages()]
     assert names == ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells", "layers",
-                     "niches", "interfaces", "report"]
+                     "niches", "interfaces", "lr_screen", "report"]
     assert [s.dir_name for s in list_stages()][:2] == ["01_ingest", "02_extract"]
     assert {s.name: s.env for s in list_stages()}["extract"] == "model"
 
@@ -179,7 +179,7 @@ def counting_stage():
 
 def test_dry_run_writes_nothing(toy):
     rows = run(toy, dry_run=True)
-    assert [r["status"] for r in rows] == ["dry-run"] * 12
+    assert [r["status"] for r in rows] == ["dry-run"] * 13
     assert not toy.run.out_dir.exists()
 
 
