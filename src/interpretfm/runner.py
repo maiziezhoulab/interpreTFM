@@ -61,6 +61,7 @@ class Stage:
     applies: Optional[Callable[[Config], bool]] = None
     order: int = 99
     doc: str = ""
+    uses_labels: bool = False  #: whether the stage reads ``dataset.labels`` (then a label change invalidates its cache)
 
     @property
     def dir_name(self) -> str:
@@ -72,12 +73,15 @@ _REGISTRY: Dict[str, Stage] = {}
 
 def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[str] = (), env: str = "core",
                    applies: Optional[Callable[[Config], bool]] = None, order: Optional[int] = None,
-                   replace: bool = False) -> Callable[[StageFunc], StageFunc]:
+                   replace: bool = False, uses_labels: bool = False) -> Callable[[StageFunc], StageFunc]:
     """Decorator registering ``func`` as the implementation of stage ``name``.
 
     ``order`` defaults to the position in :data:`interpretfm.config.STAGE_ORDER` (1-based) and
     99 for other names. Registering a name twice is an error unless ``replace`` is set (tests
-    and plug-ins use it to swap an implementation).
+    and plug-ins use it to swap an implementation). ``uses_labels`` declares that the stage reads
+    ``dataset.labels``: only then does a change of the label column, file, groups or group map
+    change the stage's configuration hash (:meth:`interpretfm.config.Config.stage_hash`), so that
+    the label-free stages (extraction, TIS, SAE, concept evaluation) keep their cached results.
     """
     if env not in ("core", "model"):
         raise ValueError(f"stage {name!r}: env must be 'core' or 'model', got {env!r}")
@@ -88,7 +92,7 @@ def register_stage(name: str, *, inputs: Sequence[str] = (), outputs: Sequence[s
         pos = order if order is not None else (STAGE_ORDER.index(name) + 1 if name in STAGE_ORDER else 99)
         _REGISTRY[name] = Stage(name=name, func=func, inputs=list(inputs), outputs=list(outputs), env=env,
                                 applies=applies, order=pos, doc=(func.__doc__ or "").strip().splitlines()[0]
-                                if func.__doc__ else "")
+                                if func.__doc__ else "", uses_labels=bool(uses_labels))
         return func
 
     return deco
@@ -114,6 +118,14 @@ def list_stages() -> List[Stage]:
 def _ensure_builtin_stages() -> None:
     # Importing the package registers the built-in stages; done lazily to avoid an import cycle.
     import interpretfm.stages  # noqa: F401
+
+
+def stage_uses_labels(name: str) -> bool:
+    """Whether a registered stage reads ``dataset.labels`` (``True`` for names that are not registered,
+    the conservative choice for the run-level hash and for plug-in names)."""
+    _ensure_builtin_stages()
+    st = _REGISTRY.get(name)
+    return True if st is None else bool(st.uses_labels)
 
 
 # --- context ------------------------------------------------------------------------------------
@@ -354,5 +366,5 @@ def status(run_dir: Union[str, Path]) -> List[Dict[str, Any]]:
 
 
 __all__ = ["MANIFEST_NAME", "Stage", "StageContext", "StageError", "get_stage", "list_stages", "plan",
-           "register_stage", "run", "run_stage_inprocess", "stage_dir", "stage_is_current", "status",
+           "register_stage", "run", "run_stage_inprocess", "stage_dir", "stage_is_current", "stage_uses_labels", "status",
            "unregister_stage"]

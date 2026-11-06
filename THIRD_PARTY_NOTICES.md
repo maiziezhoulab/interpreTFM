@@ -17,6 +17,13 @@ It contains code adapted from the projects below. Their licenses are compatible 
 - **License:** Apache License 2.0, Copyright 2025 Yale University. Full text: [`src/interp_pipeline/vendor/c2s_local/LICENSE.cell2sentence`](src/interp_pipeline/vendor/c2s_local/LICENSE.cell2sentence)
 - **Changes:** adapted to the interpreTFM extraction interface; prompt formatting uses the first template of each task instead of a random one. Each Python file carries a notice. The upstream project has no NOTICE file.
 
+## CellChatDB (human ligand–receptor database)
+
+- **Location:** `src/interpretfm/data/cellchatdb/` (`cellchatdb_human_interaction.csv.gz`, `cellchatdb_human_complex.csv.gz`, `NOTICE.md`)
+- **Source:** `CellChatDB.human` of CellChat 2.2.0, <https://github.com/jinworks/CellChat> (Jin et al., *Nature Communications* 2021; Jin et al., *Nature Protocols* 2025)
+- **License:** GNU General Public License v3 (GPL-3), the license of this package. Copyright: the CellChat authors.
+- **Changes:** none; the two data frames are exported as CSV (the interaction table restricted to five columns). The CellChat package itself is not used; only its database table is redistributed for the ligand–receptor screen (`interpretfm.lr_screen`).
+
 ## Dependencies and model weights
 
 Dependencies installed from PyPI or conda (for example PyTorch, Transformers, scanpy, and the Geneformer package) are not redistributed here and keep their own licenses. Pretrained model weights (scGPT, Geneformer, C2S-Scale) are not included; check each model's license before use.

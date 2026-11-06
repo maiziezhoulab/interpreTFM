@@ -1,6 +1,6 @@
 # Pipeline core (`interpretfm`)
 
-The v1 pipeline layer: configuration schema, stage runner, manifests, the model-environment boundary, the toy fixtures and the model-level stages. See [configuration](../pipeline/configuration.md), [running a pipeline](../pipeline/running.md), [run directory](../pipeline/run_directory.md) and the stage pages ([ingest](../pipeline/stage_ingest.md), [tis](../pipeline/stage_tis.md), [sae](../pipeline/stage_sae.md), [concepts](../pipeline/stage_concepts.md), [concept_eval](../pipeline/stage_concept_eval.md), [gene_readout](../pipeline/stage_gene_readout.md), [cells](../pipeline/stage_cells.md), [layers](../pipeline/stage_layers.md), [niches](../pipeline/stage_niches.md), [interfaces](../pipeline/stage_interfaces.md), [report](../pipeline/stage_report.md)).
+The v1 pipeline layer: configuration schema, stage runner, manifests, the model-environment boundary, the toy fixtures and the model-level stages. See [configuration](../pipeline/configuration.md), [running a pipeline](../pipeline/running.md), [run directory](../pipeline/run_directory.md) and the stage pages ([ingest](../pipeline/stage_ingest.md), [tis](../pipeline/stage_tis.md), [sae](../pipeline/stage_sae.md), [concepts](../pipeline/stage_concepts.md), [concept_eval](../pipeline/stage_concept_eval.md), [gene_readout](../pipeline/stage_gene_readout.md), [cells](../pipeline/stage_cells.md), [layers](../pipeline/stage_layers.md), [niches](../pipeline/stage_niches.md), [interfaces](../pipeline/stage_interfaces.md), [lr_screen](../pipeline/stage_lr_screen.md), [report](../pipeline/stage_report.md)).
 
 ## `interpretfm.config`
 
@@ -116,10 +116,24 @@ The v1 pipeline layer: configuration schema, stage runner, manifests, the model-
 .. automodule:: interpretfm.interfaces
 ```
 
+## `interpretfm.lr_screen`
+
+```{eval-rst}
+.. automodule:: interpretfm.lr_screen
+```
+
+## `interpretfm.neighbours`
+
+```{eval-rst}
+.. automodule:: interpretfm.neighbours
+```
+
 ## `interpretfm.report`
 
 ```{eval-rst}
 .. automodule:: interpretfm.report
+.. automodule:: interpretfm.report.metrics
+.. automodule:: interpretfm.report.html
 ```
 
 ## `interpretfm.stages`
@@ -137,6 +151,7 @@ The v1 pipeline layer: configuration schema, stage runner, manifests, the model-
 .. automodule:: interpretfm.stages.layers
 .. automodule:: interpretfm.stages.niches
 .. automodule:: interpretfm.stages.interfaces
+.. automodule:: interpretfm.stages.lr_screen
 .. automodule:: interpretfm.stages.report
 ```
 

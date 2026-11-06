@@ -48,6 +48,7 @@ dependencies = [
   "scanpy>=1.9",
   "gprofiler-official>=1.0",
   "pyyaml>=5.4",
+  "jinja2>=3.0",
 ]
 
 [project.optional-dependencies]
@@ -86,6 +87,7 @@ include = ["interp_pipeline*", "interpretfm*"]
 [tool.setuptools.package-data]
 "interp_pipeline.vendor.c2s_local" = ["prompts/*.json", "LICENSE.cell2sentence"]
 "interp_pipeline.vendor.scgpt_local" = ["LICENSE.scGPT"]
+"interpretfm" = ["report/templates/*.j2", "data/cellchatdb/*.csv.gz", "data/cellchatdb/NOTICE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -89,7 +89,16 @@ SPATIAL_COSMX_SCGPT = {
     # marker-excluded QC (p6): spillover-robust pairs and the tercile gradient of the reduced score
     "marker_excluded": {"n_pairs": 13, "robust": ("macrophage|treg", "t_cd4_memory|dendritic", "t_cd4_memory|t_cd8_memory"),
                         "reduced_median_g": -1.067, "reduced_ci": (-2.056, 0.079)},
-    "lr_screen": {"n_pairs": 397, "hits_ge1": 7, "hits_ge3": 33, "robust": 3},
-    "matched_radius": {"cosmx_px": 652.8, "cosmx_um": 117.5, "cosmx_cells": 287, "xenium_um": 15.4, "xenium_cells": 7.2},
+    # ligand-receptor screen (Table S12 / Results; per-pair values from the manuscript's screen table and its matched-radius re-run)
+    "lr_screen": {"n_pairs": 397, "n_pairs_ge3": 97, "hits_ge1": 7, "hits_ge3": 33, "robust": 3, "depleted": 0,
+                  "robust_pairs": ("CEACAM6_CEACAM6", "ESAM_ESAM", "PECAM1_PECAM1"),
+                  "robust_fold_ge1": {"CEACAM6_CEACAM6": 1.360, "ESAM_ESAM": 1.334, "PECAM1_PECAM1": 1.299},
+                  "radius_px": 100.0, "radius_um": 18.0, "seed": 7,
+                  # the same screen at the matched radius (652.8 px = 117.5 um): hits at >= 1 / >= 3, robust
+                  "matched": {"hits_ge1": 2, "hits_ge3": 52, "robust": 1, "robust_pairs": ("CEACAM6_CEACAM6",), "depleted": 0}},
+    # matched-neighbour radii (Table S20): mean number of other cells within the radius, both sections
+    "matched_radius": {"cosmx_px": 652.8, "cosmx_um": 117.5, "cosmx_cells_at_100px": 7.20, "cosmx_cells_at_matched": 286.70,
+                       "xenium_um": 15.4, "xenium_cells_at_100um": 286.67, "xenium_cells_at_matched": 7.24,
+                       "xenium_config": "xenium_scgpt_layer3"},
     "niche_concepts": {"shared_top25": (2, 8, 8), "jaccard": (0.042, 0.190, 0.190)},
 }

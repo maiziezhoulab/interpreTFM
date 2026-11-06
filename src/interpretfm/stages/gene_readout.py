@@ -44,7 +44,7 @@ from interpretfm.stores import resolve_store
 OUTPUTS = ["gene_readout.json", "gene_readout.csv", "per_concept.csv.gz"]
 
 
-@register_stage("gene_readout", inputs=["extract", "sae", "concepts"], outputs=OUTPUTS)
+@register_stage("gene_readout", inputs=["extract", "sae", "concepts"], outputs=OUTPUTS, uses_labels=True)
 def run_gene_readout(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Gene-level linear readout of concept membership on unseen genes, with expression and random controls."""
     import anndata as ad

@@ -54,6 +54,7 @@ pipeline/stage_cells
 pipeline/stage_layers
 pipeline/stage_niches
 pipeline/stage_interfaces
+pipeline/stage_lr_screen
 pipeline/stage_report
 reproducing
 ```

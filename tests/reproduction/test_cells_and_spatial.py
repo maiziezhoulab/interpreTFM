@@ -13,7 +13,9 @@ Two kinds of test, as in ``test_model_stages.py``:
 Tolerances: ±0.005 on F1/GSI/MHR/ARI/NMI, ±1 on counts (±0.01 on purity, ±5 % on the purity z,
 whose null has 10 draws). T10 (interface test) runs the library on the cached niche-labelled h5ads of the three
 CosMx models and reads the `interfaces` stage of the paper run; the partner-marker tercile and marker-excluded
-checks run on the cached calls of the three models. T11-T12 (LR screen, matched radius) are placeholders.
+checks run on the cached calls of the three models. T11 runs the ligand-receptor screen on the dataset (at the paper's radius
+and at the matched radius) and reads the `lr_screen` stage; T12 computes the matched-neighbour radii of both sections from
+their coordinates.
 """
 from __future__ import annotations
 
@@ -23,11 +25,18 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+import scipy.sparse as sp
 
 from repro_support import cached_path, check, dev_table, report
 from expected import EXPECTED, PRIMARY, SPATIAL_COSMX_SCGPT
 
 from interpretfm.cells import RetentionRule, select_features
+from interpretfm.genes import GeneTable
+from interpretfm.ingest import counts_matrix, dataset_labels
+from interpretfm.lr_screen import load_cellchatdb, neighbour_graph, niche_placement, panel_pairs, screen_pairs, screen_summary
+from interpretfm.neighbours import match_radius, mean_other_cells
+from interpretfm.stages.lr_screen import resolve_radius, screen_params
+from interpretfm.units import adata_coords_um
 from interpretfm.interfaces import (
     InterfaceParams,
     adjust_score,
@@ -49,7 +58,6 @@ from interpretfm.niches import label_agreement, label_composition, radius_to_nat
 CELL_STAGES = ["ingest", "extract", "tis", "sae", "concepts", "concept_eval", "gene_readout", "cells"]
 NICHE_STAGES = CELL_STAGES + ["layers", "niches"]
 SPS = ("reconstruction", "spatial_sparse")
-SPATIAL_TODO = "TODO: needs the ligand-receptor screen and matched-radius stage (P2-C); expected values are in expected.SPATIAL_COSMX_SCGPT"
 GENEFORMER_CACHE = ("geneformer", "layer_1", "r120p0_m_kmeans_k3")
 
 
@@ -571,10 +579,215 @@ def test_partner_marker_tercile_and_marker_excluded_from_cache():
     check(f"{PRIMARY} full score on the same permutations = tercile primary row (CI high)", full["ci_hi"], prim["ci_hi"], tol=1e-9)
 
 
-# --- T11-T12: placeholders ------------------------------------------------------------------------
+# --- T11-T12: ligand-receptor screen and matched-neighbour radius -----------------------------------------
 
 
-@pytest.mark.skip(reason=SPATIAL_TODO)
-@pytest.mark.parametrize("key", ["lr_screen", "matched_radius"])
-def test_t11_t12_spatial(paper, key):
-    assert key in SPATIAL_COSMX_SCGPT and PRIMARY in EXPECTED
+def _screen_inputs(paper):
+    """The dataset as the screen reads it: raw counts, gene symbols, labels and native coordinates of the CosMx paper configuration."""
+    import anndata as ad
+
+    cfg = paper.config(PRIMARY)
+    a = ad.read_h5ad(cfg.dataset.h5ad)
+    X = sp.csr_matrix(counts_matrix(a, cfg.dataset.counts_layer)).astype(np.float32)
+    gk = cfg.stage_params("concepts").get("gene_keys") or {}
+    genes = GeneTable.from_adata(a, cfg.dataset.gene_id, symbol_column=gk.get("symbol_column"), ensembl_column=gk.get("ensembl_column"))
+    symbols = [s_ if s_ is not None else k for s_, k in zip(genes.symbols, genes.keys)]
+    labels = dataset_labels(cfg.dataset, a)
+    coords = np.asarray(a.obsm[cfg.dataset.spatial.obsm], dtype=np.float64)[:, :2]
+    return cfg, X, symbols, labels, coords, pd.Index([str(o) for o in a.obs_names])
+
+
+def _cached_c3_table():
+    return cached_path("revision_metrics", "hypotheses_fable_spatial_explore", "tables", "C3_lr_screen_cosmx.csv")
+
+
+def _compare_screen_tables(label: str, mine: pd.DataFrame, ref: pd.DataFrame, thresholds=(1, 3)):
+    """Per-pair comparison with a cached screen table: observed counts exact; fold, z and q within 0.005; identical flags."""
+    m = mine.set_index("interaction_name").reindex(ref["interaction_name"])
+    r = ref.set_index("interaction_name")
+    assert set(mine["interaction_name"]) == set(ref["interaction_name"]), label
+    for thr in thresholds:
+        tested = r[f"tested_thr{thr}"].fillna(False).astype(bool).to_numpy()
+        assert (m[f"tested_thr{thr}"].fillna(False).astype(bool).to_numpy() == tested).all(), f"{label}: tested pairs at >= {thr} differ"
+        for c, tol in ((f"obs_thr{thr}", 0.0), (f"fold_thr{thr}", 0.005), (f"z_thr{thr}", 0.005), (f"q_thr{thr}", 0.005)):
+            d = float(np.nanmax(np.abs(m.loc[tested, c].to_numpy(float) - r.loc[tested, c].to_numpy(float)))) if tested.any() else 0.0
+            report(f"{label} max |Δ| of {c} over the tested pairs", d, None, None, tol)
+            assert d <= tol, f"{label}: {c}"
+        hits_m = set(m.index[m[f"hit_thr{thr}"].fillna(False).astype(bool)])
+        hits_r = set(r.index[r[f"hit_thr{thr}"].fillna(False).astype(bool)])
+        report(f"{label} hits at >= {thr} identical to the cached table", hits_m == hits_r, True)
+        assert hits_m == hits_r
+    assert set(m.index[m["robust_hit"].fillna(False).astype(bool)]) == set(r.index[r["robust_hit"].fillna(False).astype(bool)])
+
+
+def _check_screen_counts(label: str, summ: dict, e: dict):
+    check(f"{label} pairs tested at >= 1", summ["thresholds"]["1"]["n_tested"], e["n_pairs"], tol=0)
+    check(f"{label} pairs tested at >= 3", summ["thresholds"]["3"]["n_tested"], e["n_pairs_ge3"], tol=0)
+    check(f"{label} hits at >= 1", summ["thresholds"]["1"]["n_hits"], e["hits_ge1"], tol=0)
+    check(f"{label} hits at >= 3", summ["thresholds"]["3"]["n_hits"], e["hits_ge3"], tol=0)
+    check(f"{label} robust hits", summ["n_robust"], e["robust"], tol=0)
+    check(f"{label} depleted pairs", summ["n_depleted"], e["depleted"], tol=0)
+    report(f"{label} robust pairs", tuple(sorted(summ["robust"])), tuple(sorted(e["robust_pairs"])))
+    assert tuple(sorted(summ["robust"])) == tuple(sorted(e["robust_pairs"]))
+
+
+def _placement_vs_cached(label: str, mine: pd.DataFrame, ref: pd.DataFrame, pairs, tol: float, match_ids: bool):
+    """Niche placement ratios of ``pairs`` against the cached table's `niche_ratio_scgpt_n<k>` columns. With ``match_ids`` the
+    niche ids are matched by the smallest total difference of the ratio patterns (the pipeline numbers niches by size)."""
+    r = ref.set_index("interaction_name")
+    ref_cols = sorted(c for c in r.columns if c.startswith("niche_ratio_scgpt_n"))
+    mine_ids = sorted(mine["niche"].astype(str).unique(), key=lambda v: (len(v), v))
+    M = mine.pivot(index="interaction_name", columns="niche", values="ratio").reindex(pairs)
+    M.columns = [str(c) for c in M.columns]
+    R = r.loc[pairs, ref_cols].to_numpy(float)
+    perms = [tuple(mine_ids)]
+    if match_ids:
+        from itertools import permutations
+        perms = list(permutations(mine_ids))
+    best = min(perms, key=lambda pm: float(np.nansum(np.abs(M[list(pm)].to_numpy(float) - R))))
+    d = float(np.nanmax(np.abs(M[list(best)].to_numpy(float) - R)))
+    report(f"{label} niche ratios of the placed pairs vs the cached table (niche ids {dict(zip(best, [c[-1] for c in ref_cols]))}): max |Δ|", d, None, None, tol)
+    for name in pairs:
+        report(f"{label} {name} niche ratios (pipeline order {list(best)})", tuple(round(float(x), 3) for x in M.loc[name, list(best)]),
+               tuple(round(float(x), 3) for x in r.loc[name, ref_cols]))
+    assert d <= tol
+
+
+def test_t11_lr_screen_from_dataset(paper):
+    """The screen (`interpretfm.lr_screen`) on the dataset alone at 100 px = 18 µm with the manuscript's seed: 397 pairs on
+    the panel (97 testable at >= 3), 7 / 33 hits, 3 robust (CEACAM6, ESAM, PECAM1), none depleted; every tested pair's
+    observed count, fold, z and q equal the cached screen table; the niche placement of the robust hits on the cached
+    scGPT niches equals the cached ratios. About one minute."""
+    e = SPATIAL_COSMX_SCGPT["lr_screen"]
+    cfg, X, symbols, labels, coords, obs = _screen_inputs(paper)
+    p = cfg.stage_params("lr_screen")
+    radius = radius_to_native(p["radius_um"], cfg.dataset.spatial.um_per_unit)
+    check(f"{PRIMARY} T11 radius in px", radius, e["radius_px"], tol=1e-6)
+    db, cmap = load_cellchatdb()
+    pairs = panel_pairs(db, cmap, symbols)
+    check(f"{PRIMARY} T11 pairs on the panel", len(pairs), e["n_pairs"], tol=0)
+    params = screen_params(p, radius)
+    assert params.seed == e["seed"] and params.thresholds == [1, 3] and params.n_perm == 100 and params.min_positive == 100
+    A = neighbour_graph(coords, radius)
+    res = screen_pairs(X, symbols, labels, coords, pairs, params, A=A)
+    _check_screen_counts(f"{PRIMARY} T11 (dataset)", screen_summary(res, params), e)
+    rs = res.set_index("interaction_name")
+    for name, fold in e["robust_fold_ge1"].items():
+        check(f"{PRIMARY} T11 fold of {name} at >= 1", rs.at[name, "fold_thr1"], fold)
+    c3 = _cached_c3_table()
+    if c3 is not None:
+        ref = pd.read_csv(c3)
+        _compare_screen_tables(f"{PRIMARY} T11 (dataset)", res, ref)
+        b = _cached_validation_adata("scgpt")
+        niche = b.obs["niche"].astype(int).astype(str).reindex(obs)
+        niche = np.array([None if pd.isna(v) else str(v) for v in niche], dtype=object)
+        which = res.index[res["robust_hit"].astype(bool)].tolist()
+        P = niche_placement(res, X, symbols, A, niche, which, thr=1)
+        _placement_vs_cached(f"{PRIMARY} T11 (dataset, cached niches)", P, ref, list(res.loc[which, "interaction_name"]), 0.005, match_ids=False)
+
+
+def test_t11_lr_screen_matched_radius_from_dataset(paper):
+    """The screen at the matched radius: `match_neighbors_to` = the Xenium section's mean count at 100 µm (286.67) gives
+    652.8 px = 117.5 µm (grid 0.5 px, rounded to 0.1 px; 286.70 other cells); the unchanged screen there has 2 hits at
+    >= 1, 52 at >= 3 and 1 robust (CEACAM6), per pair equal to the cached matched-radius table. About five minutes."""
+    e, em = SPATIAL_COSMX_SCGPT["lr_screen"]["matched"], SPATIAL_COSMX_SCGPT["matched_radius"]
+    cfg, X, symbols, labels, coords, _obs = _screen_inputs(paper)
+    p = dict(cfg.stage_params("lr_screen"))
+    p.pop("radius_um", None)
+    p["match_neighbors_to"] = _xenium_count_at_100um(paper)
+    rad = resolve_radius(p, cfg.dataset.spatial.um_per_unit, coords)
+    check(f"{PRIMARY} T11/T12 matched radius (px)", rad["radius_native"], em["cosmx_px"], tol=0.1)
+    check(f"{PRIMARY} T11/T12 matched radius (µm)", rad["radius_um"], em["cosmx_um"], tol=0.05)
+    check(f"{PRIMARY} T12 mean other cells at the matched radius", rad["matched"]["mean_other_cells"], em["cosmx_cells_at_matched"], tol=0.01)
+    params = screen_params(p, rad["radius_native"])
+    db, cmap = load_cellchatdb()
+    res = screen_pairs(X, symbols, labels, coords, panel_pairs(db, cmap, symbols), params)
+    summ = screen_summary(res, params)
+    check(f"{PRIMARY} T11 matched radius: hits at >= 1", summ["thresholds"]["1"]["n_hits"], e["hits_ge1"], tol=0)
+    check(f"{PRIMARY} T11 matched radius: hits at >= 3", summ["thresholds"]["3"]["n_hits"], e["hits_ge3"], tol=0)
+    check(f"{PRIMARY} T11 matched radius: robust", summ["n_robust"], e["robust"], tol=0)
+    check(f"{PRIMARY} T11 matched radius: depleted", summ["n_depleted"], e["depleted"], tol=0)
+    assert tuple(sorted(summ["robust"])) == tuple(sorted(e["robust_pairs"]))
+    ref = cached_path("reconstruction", "readthrough_20261104", "P10_matched_radius", "tables", "p10_lr_screen_cosmx_r652p8.csv")
+    if ref is not None:
+        _compare_screen_tables(f"{PRIMARY} T11 (matched radius)", res, pd.read_csv(ref))
+
+
+def _xenium_coords(paper):
+    """Native coordinates (µm) of the Xenium paper configuration's dataset, read as its ingest reads them."""
+    import anndata as ad
+
+    xcfg = paper.config(SPATIAL_COSMX_SCGPT["matched_radius"]["xenium_config"])
+    a = ad.read_h5ad(xcfg.dataset.h5ad, backed="r")
+    coords = adata_coords_um(a, xcfg.dataset.spatial)   # um_per_unit = 1: µm are the native unit
+    a.file.close()
+    return coords, xcfg.dataset.spatial.um_per_unit
+
+
+_XENIUM_COUNT = {}
+
+
+def _xenium_count_at_100um(paper) -> float:
+    if "value" not in _XENIUM_COUNT:
+        coords, upu = _xenium_coords(paper)
+        _XENIUM_COUNT["value"] = mean_other_cells(coords, 100.0 / upu)
+    return _XENIUM_COUNT["value"]
+
+
+def test_t12_matched_neighbour_radii(paper):
+    """Coordinates only, both sections: CosMx 7.20 other cells at 100 px and 286.70 at 652.8 px (117.5 µm); Xenium 286.67
+    at 100 µm and 7.24 at 15.4 µm; the matched radii 652.8 px and 15.4 µm (grids 0.5 px / 0.1 µm, rounded to 0.1 unit),
+    against the cached `p10_matched_radii.json`. About four minutes (the Xenium curve)."""
+    em = SPATIAL_COSMX_SCGPT["matched_radius"]
+    cfg, _X, _symbols, _labels, cx, _obs = _screen_inputs(paper)
+    xe, _upu = _xenium_coords(paper)
+    n_cx100 = mean_other_cells(cx, 100.0)
+    n_xe100 = mean_other_cells(xe, 100.0)
+    check(f"{PRIMARY} T12 CosMx mean other cells at 100 px", n_cx100, em["cosmx_cells_at_100px"], tol=0.01)
+    check(f"{PRIMARY} T12 Xenium mean other cells at 100 µm", n_xe100, em["xenium_cells_at_100um"], tol=0.01)
+    mb = match_radius(cx, n_xe100, step=cfg.stage_params("lr_screen").get("match_grid_step", 0.5), round_decimals=1)
+    ma = match_radius(xe, n_cx100, step=0.1, round_decimals=1)
+    check(f"{PRIMARY} T12 CosMx matched radius (px)", mb["radius"], em["cosmx_px"], tol=0.1)
+    check(f"{PRIMARY} T12 CosMx matched radius (µm)", mb["radius"] * cfg.dataset.spatial.um_per_unit, em["cosmx_um"], tol=0.05)
+    check(f"{PRIMARY} T12 CosMx mean other cells at the matched radius", mb["mean_other_cells"], em["cosmx_cells_at_matched"], tol=0.01)
+    check(f"{PRIMARY} T12 Xenium matched radius (µm)", ma["radius"], em["xenium_um"], tol=0.1)
+    check(f"{PRIMARY} T12 Xenium mean other cells at the matched radius", ma["mean_other_cells"], em["xenium_cells_at_matched"], tol=0.01)
+    cached = cached_path("reconstruction", "readthrough_20261104", "P10_matched_radius", "tables", "p10_matched_radii.json")
+    if cached is not None:
+        j = json.load(open(cached))
+        check(f"{PRIMARY} T12 CosMx count at 100 px vs the cached value", n_cx100, None, j["cosmx_mean_count_at_100px"], tol=1e-9)
+        check(f"{PRIMARY} T12 Xenium count at 100 µm vs the cached value", n_xe100, None, j["xenium_mean_count_at_100um"], tol=1e-9)
+        check(f"{PRIMARY} T12 CosMx matched radius vs the cached value", mb["radius"], None, j["b_cosmx_radius_px"], tol=1e-9)
+        check(f"{PRIMARY} T12 Xenium matched radius vs the cached value", ma["radius"], None, j["a_xenium_radius_um"], tol=1e-9)
+        check(f"{PRIMARY} T12 CosMx count at the matched radius vs the cached value", mb["mean_other_cells"], None, j["b_cosmx_mean_count_at_rb"], tol=1e-9)
+        check(f"{PRIMARY} T12 Xenium count at the matched radius vs the cached value", ma["mean_other_cells"], None, j["a_xenium_mean_count_at_ra"], tol=1e-9)
+
+
+def test_t11_t12_lr_screen_stage(paper):
+    """The `lr_screen` stage of the paper run: 397 / 97 pairs tested, 7 / 33 hits, 3 robust, none depleted, every tested pair
+    equal to the cached screen table, 7.20 other cells within 100 px (T12 from the run); the placement of the robust hits
+    on the pipeline's own niches (numbered by size, matched to the cached niches by their ratio pattern) within ±0.05 of the
+    cached ratios (the partition differs slightly from the cached one, see T8/T10)."""
+    e, em = SPATIAL_COSMX_SCGPT["lr_screen"], SPATIAL_COSMX_SCGPT["matched_radius"]
+    exp = EXPECTED[PRIMARY]
+    rd = paper.run_dir(PRIMARY, NICHE_STAGES + ["lr_screen"])
+    s = json.load(open(rd / "12_lr_screen" / "summary.json"))
+    check(f"{PRIMARY} T11 (stage) radius in px", s["radius_native"], e["radius_px"], tol=1e-6)
+    check(f"{PRIMARY} T11 (stage) radius in µm", s["radius_um"], e["radius_um"], tol=1e-6)
+    assert s["params"]["seed"] == e["seed"] and s["params"]["thresholds"] == [1, 3] and s["database"]["packaged"]
+    check(f"{PRIMARY} T11 (stage) pairs on the panel", s["n_pairs_on_panel"], e["n_pairs"], tol=0)
+    check(f"{PRIMARY} T12 (stage) mean other cells at 100 px", s["mean_other_cells"], em["cosmx_cells_at_100px"], tol=0.01)
+    _check_screen_counts(f"{PRIMARY} T11 (stage)", s["summary"], e)
+    res = pd.read_csv(rd / "12_lr_screen" / "screen.csv")
+    rs = res.set_index("interaction_name")
+    for name, fold in e["robust_fold_ge1"].items():
+        check(f"{PRIMARY} T11 (stage) fold of {name} at >= 1", rs.at[name, "fold_thr1"], fold)
+    c3 = _cached_c3_table()
+    if c3 is not None:
+        ref = pd.read_csv(c3)
+        _compare_screen_tables(f"{PRIMARY} T11 (stage)", res, ref)
+        pl = rd / "12_lr_screen" / exp["layer"] / "placement.csv"
+        assert pl.exists() and s["layers"][exp["layer"]]["niche_column"] == "niche_at_r18um/xm/kmeans/k3"
+        P = pd.read_csv(pl)
+        robust = [n for n in res.loc[res["robust_hit"].astype(bool), "interaction_name"]]
+        _placement_vs_cached(f"{PRIMARY} T11 (stage, pipeline niches)", P[P["interaction_name"].isin(robust)], ref, robust, 0.05, match_ids=True)

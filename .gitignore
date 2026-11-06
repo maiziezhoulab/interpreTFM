@@ -24,6 +24,7 @@ docs/api/generated/
 
 # Data, model weights and analysis outputs (never commit these)
 data/
+!src/interpretfm/data/
 checkpoints/
 runs/
 outputs/
