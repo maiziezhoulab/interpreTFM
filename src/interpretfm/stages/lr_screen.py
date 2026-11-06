@@ -27,6 +27,9 @@ Parameters (``stages.lr_screen``): ``radius_um`` or ``match_neighbors_to`` (one 
 ``match_grid_step`` (0.1), ``match_round_decimals`` (1), ``thresholds`` ([1, 3]), ``n_perm`` (100),
 ``seed`` (0), ``min_positive`` (100), ``q_max`` (0.05), ``fold_min`` (1.2), ``database`` (CSV),
 ``complexes`` (CSV, or ``false`` for none), ``niche`` ({column: ...} or {config: ...}),
+``labels`` (a label set for this stage with the keys of ``dataset.labels`` — ``column``, ``file``,
+``file_column``, ``groups``, ``group_map`` — used instead of ``dataset.labels``; the manuscript's
+Xenium screen permutes within marker-derived labels read from a per-cell CSV),
 ``niche_labels`` ({<layer>: csv} overrides), ``placement_pairs`` ([interaction names]),
 ``placement`` (true).
 
@@ -44,7 +47,7 @@ import numpy as np
 import pandas as pd
 
 from interpretfm.genes import GeneTable
-from interpretfm.ingest import counts_matrix, dataset_labels
+from interpretfm.ingest import counts_matrix, dataset_labels, stage_labels
 from interpretfm.lr_screen import (
     DEFAULT_COMPLEXES,
     DEFAULT_INTERACTIONS,
@@ -128,8 +131,9 @@ def run_lr_screen(ctx: StageContext) -> Optional[Dict[str, Any]]:
     cfg, p = ctx.config, ctx.params
     ds, spat = cfg.dataset, cfg.dataset.spatial
     upu = float(spat.um_per_unit)
-    if ds.labels is None:
-        raise ValueError("stages.lr_screen needs dataset.labels (the cell types of the within-type null)")
+    label_set = stage_labels(cfg, p, STAGE)
+    if label_set is None:
+        raise ValueError("stages.lr_screen needs dataset.labels or stages.lr_screen.labels (the cell types of the within-type null)")
     db_path = get_param(p, "database", None, STAGE, str)
     cx = p.get("complexes", None)
     if cx is not None and not isinstance(cx, (str, bool)):
@@ -147,7 +151,7 @@ def run_lr_screen(ctx: StageContext) -> Optional[Dict[str, Any]]:
         raise KeyError(f"dataset.spatial.obsm: '{spat.obsm}' not in adata.obsm")
     coords = np.asarray(adata.obsm[spat.obsm], dtype=np.float64)[:, :2]
     obs_names = pd.Index([str(o) for o in adata.obs_names])
-    labels = dataset_labels(ds, adata)
+    labels = dataset_labels(label_set, adata)
     gk = cfg.stage_params("concepts").get("gene_keys") or {}
     genes = GeneTable.from_adata(adata, ds.gene_id, symbol_column=gk.get("symbol_column"), ensembl_column=gk.get("ensembl_column"))
     symbols = [s if s is not None else k for s, k in zip(genes.symbols, genes.keys)]
@@ -203,7 +207,7 @@ def run_lr_screen(ctx: StageContext) -> Optional[Dict[str, Any]]:
                         (f"n_lig_pos_thr{thr}", f"n_rec_pos_thr{thr}", f"obs_thr{thr}", f"fold_thr{thr}", f"z_thr{thr}", f"q_thr{thr}", f"hit_thr{thr}")]
                         + ["robust_hit", f"depleted_thr{p0}", "top_celltype_pairs"]]
     out = {"params": params.to_dict(), "radius_um": rad["radius_um"], "radius_native": params.radius, "um_per_unit": upu, "matched": rad["matched"],
-           "mean_other_cells": float(mean_count), "n_cells": int(X.shape[0]), "n_edges": n_edges, "labels": {"column": ds.labels.column, "n": int(len(set(labels.tolist())))},
+           "mean_other_cells": float(mean_count), "n_cells": int(X.shape[0]), "n_edges": n_edges, "labels": {"column": label_set.column, "file": None if label_set.file is None else str(label_set.file), "n": int(len(set(labels.tolist())))},
            "database": {"interactions": str(db_file), "complexes": str(cx_file) if cx_file is not False else None, "n_rows": int(len(db)), "n_complexes": len(cmap),
                         "packaged": db_path is None},
            "n_pairs_on_panel": int(len(pairs)), "summary": summ, "niche_column": niche_col, "placed": [str(x) for x in res.loc[placed, "interaction_name"]],

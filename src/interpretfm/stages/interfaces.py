@@ -30,7 +30,9 @@ edge radius), ``legacy_tile_um`` (10/3 × block), ``length_scales_um`` ([0.5, 1.
 ``n_perm`` (100), ``calib_perm`` (50), ``calib_reps`` (2), ``legacy_perm`` (20), ``min_edges``
 (50), ``clip_quantile`` (0.995), ``exclude_groups`` ([low_quality, unresolved]),
 ``signal_fractions``, ``seeds`` (the reference seeds, see :data:`interpretfm.interfaces.DEFAULT_SEEDS`),
-``labels`` ({normalize: true}), ``covariates`` ({area: ...}), ``niche`` ({column: niche} or
+``labels`` ({normalize: true}, plus an optional label set for this stage with the keys of
+``dataset.labels`` — ``column``, ``file``, ``file_column``, ``groups``, ``group_map`` — used
+instead of ``dataset.labels``, as for the manuscript's Xenium marker-derived labels), ``covariates`` ({area: ...}), ``niche`` ({column: niche} or
 {config: <label>}), ``niche_labels``, ``cells_h5ad``, ``markers`` ({enabled: true, top_n: 10}),
 ``fired_on`` ({enabled: true, max_shards: null, threshold: 0.15, rate: 0.2, mass: 0.8,
 batch_size: 8192}), ``store_root``, ``token_vocab``, ``checkpoints`` ({<layer>: path}).
@@ -48,7 +50,7 @@ import numpy as np
 import pandas as pd
 
 from interpretfm.genes import GeneTable, resolver_for
-from interpretfm.ingest import counts_matrix, dataset_labels, label_group_map
+from interpretfm.ingest import counts_matrix, dataset_labels, label_group_map, stage_labels
 from interpretfm.interfaces import (
     DEFAULT_EXCLUDE,
     DEFAULT_SEEDS,
@@ -178,16 +180,17 @@ def run_interfaces(ctx: StageContext) -> Optional[Dict[str, Any]]:
     fo = get_mapping(p, "fired_on", "interfaces")
     fo_on = get_param(fo, "enabled", True, "interfaces.fired_on", bool)
 
-    if ds.labels is None:
-        raise ValueError("stages.interfaces needs dataset.labels (the cell groups whose interfaces are tested)")
+    label_set = stage_labels(cfg, p, "interfaces")
+    if label_set is None:
+        raise ValueError("stages.interfaces needs dataset.labels or stages.interfaces.labels (the cell groups whose interfaces are tested)")
     adata = ad.read_h5ad(ds.h5ad)
     counts = counts_matrix(adata, ds.counts_layer)
     if sp.obsm not in adata.obsm:
         raise KeyError(f"dataset.spatial.obsm: '{sp.obsm}' not in adata.obsm")
     coords_all = np.asarray(adata.obsm[sp.obsm], dtype=np.float64)[:, :2]
     obs_names = pd.Index([str(o) for o in adata.obs_names])
-    labels_all = dataset_labels(ds, adata)
-    gmap = label_group_map(ds)
+    labels_all = dataset_labels(label_set, adata)
+    gmap = label_group_map(label_set)
     exact_all, group_all = group_labels(labels_all, gmap, normalize=normalize)
     area = cell_area(adata.obs, area_spec)
     cov_all = covariates(counts, area)
@@ -275,7 +278,7 @@ def run_interfaces(ctx: StageContext) -> Optional[Dict[str, Any]]:
         ctx.write_json(f"{layer}/summary.json", info)
         summary[layer] = info
 
-    ctx.write_json("summary.json", {"params": params.to_dict(), "niche_column": niche_col, "labels": {"column": ds.labels.column, "normalize": normalize,
+    ctx.write_json("summary.json", {"params": params.to_dict(), "niche_column": niche_col, "labels": {"column": label_set.column, "file": None if label_set.file is None else str(label_set.file), "normalize": normalize,
                                      "n_exact": int(len(set(exact_all))), "n_groups": int(len(set(group_all))), "group_map": gmap,
                                      "exclude": list(params.exclude)},
                                     "covariates": [c for c in ("log_counts", "log_genes", "log_area") if c in cov_all.columns],

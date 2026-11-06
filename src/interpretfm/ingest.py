@@ -26,12 +26,15 @@ class IngestError(ValueError):
 
 
 def dataset_labels(ds, adata) -> Optional[np.ndarray]:
-    """Per-cell labels (object array of strings) as ``dataset.labels`` declares them: the ``obs``
-    column, or the ``file_column`` of the CSV ``file`` keyed by cell id (every cell of the
-    dataset must appear in it). ``None`` when the configuration has no labels."""
+    """Per-cell labels (object array of strings) as ``dataset.labels`` (or the given
+    :class:`~interpretfm.config.Labels`) declares them: the ``obs`` column, or the
+    ``file_column`` of the CSV ``file`` keyed by cell id (every cell of the dataset must appear in
+    it). ``None`` when the configuration has no labels."""
     import pandas as pd
 
-    lab = ds.labels
+    from interpretfm.config import Labels
+
+    lab = ds if isinstance(ds, Labels) or ds is None else ds.labels
     if lab is None:
         return None
     if lab.file is not None:
@@ -52,12 +55,34 @@ def dataset_labels(ds, adata) -> Optional[np.ndarray]:
     return adata.obs[lab.column].astype(str).to_numpy(dtype=object)
 
 
+def stage_labels(cfg, params: Dict[str, Any], stage: str):
+    """The label set a stage works with: its own ``labels`` override (``{column, file,
+    file_column, groups, group_map}``, the keys of ``dataset.labels``; a relative ``file`` /
+    ``groups`` resolves against the configuration file) when given, else ``dataset.labels``
+    (``None`` without either). The manuscript's Xenium niches, interfaces and screen use the
+    marker-derived labels of a per-cell CSV while its cell-level numbers use the dataset's
+    ``cell_type`` column, so the spatial stages take the override."""
+    from interpretfm.config import ConfigError, parse_labels
+
+    raw = params.get("labels")
+    if not isinstance(raw, dict) or not any(k in raw for k in ("column", "file", "groups", "group_map")):
+        return cfg.dataset.labels
+    errors: List[str] = []
+    keys = {k: v for k, v in raw.items() if k in ("column", "file", "file_column", "groups", "group_map")}
+    base = Path(cfg.source).parent if cfg.source is not None else Path.cwd()
+    lab = parse_labels(keys, base, f"stages.{stage}.labels", errors)
+    if errors or lab is None:
+        raise ConfigError(errors or [f"stages.{stage}.labels: column is required"])
+    return lab
+
+
 def label_group_map(ds) -> Dict[str, str]:
-    """The label → group mapping of ``dataset.labels`` (``groups`` CSV merged with ``group_map``;
-    empty without either)."""
+    """The label → group mapping of ``dataset.labels`` or of a :class:`~interpretfm.config.Labels`
+    (``groups`` CSV merged with ``group_map``; empty without either)."""
+    from interpretfm.config import Labels
     from interpretfm.interfaces import load_group_map, norm_label
 
-    lab = ds.labels
+    lab = ds if isinstance(ds, Labels) or ds is None else ds.labels
     if lab is None:
         return {}
     out: Dict[str, str] = {}
