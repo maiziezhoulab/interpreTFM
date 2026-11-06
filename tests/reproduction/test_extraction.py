@@ -56,7 +56,9 @@ def test_fresh_extraction_matches_cached_store(paper, name):
     report(f"{name} extracted", f"{manifest['n_cells']} cells, {manifest['n_rows']} rows, {manifest['n_shards']} shards, "
                                f"{manifest['dtype']}, torch {manifest['environment']['torch']['version']}, "
                                f"cuda {manifest['environment']['torch']['cuda_available']}")
-    assert manifest["n_cells"] == 2000 and manifest["n_cells_with_pooling_token"] == 2000
+    assert manifest["n_cells"] == 2000
+    if manifest["cell_pooling"]["kind"] == "token":
+        assert manifest["n_cells_with_pooling_token"] == 2000
     assert manifest["environment"]["torch"]["cuda_available"], "the extraction did not run on a GPU"
     cells = (sdir / "cell_subset.txt").read_text().split()
     cached = Path(os.environ["INTERPRETFM_STORES"]) / case["store"]

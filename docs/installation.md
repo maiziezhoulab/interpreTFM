@@ -24,7 +24,7 @@ conda activate interpretfm
 python -m pip install -e .
 ```
 
-Repeat with `envs/geneformer.yml` or `envs/c2s.yml` for the other models, and run `python -m pip install --no-deps -e .` inside each of them: the pipeline's `extract` stage runs inside the model's environment as a child process (`model.env: {conda: geneformer}` in the configuration) and imports the package there; everything after extraction runs in `interpretfm`. Without an install, exporting `PYTHONPATH=<repo>/src` also works, since the child inherits it. The environment files were exported from the installations that produced the manuscript's activation stores; `interpretfm.yml` and `geneformer.yml` match them version for version. Container images of the three environments can be built from `containers/` (not tested on the development machine; see `containers/README.md`) and used with `model.env: {container: <image>}`.
+Repeat with `envs/geneformer.yml` or `envs/c2s.yml` for the other models, and run `python -m pip install --no-deps -e .` inside each of them: the pipeline's `extract` stage runs inside the model's environment as a child process (`model.env: {conda: geneformer}` in the configuration) and imports the package there; everything after extraction runs in `interpretfm`. Without an install, exporting `PYTHONPATH=<repo>/src` also works, since the child inherits it. The environment files were exported from the installations that produced the manuscript's activation stores; `interpretfm.yml`, `geneformer.yml` and `c2s.yml` match them version for version (the fresh-extraction tests reproduce the stores from them). Container images of the three environments can be built from `containers/` (not tested on the development machine; see `containers/README.md`) and used with `model.env: {container: <image>}`.
 
 Notes:
 
@@ -51,7 +51,7 @@ Weights, datasets and activation stores are not distributed with the code.
 |---|---|---|
 | scGPT | [scGPT repository](https://github.com/bowang-lab/scGPT), whole-human checkpoint | the checkpoint folder must contain `best_model.pt` and `vocab.json` |
 | Geneformer | [Hugging Face: ctheodoris/Geneformer](https://huggingface.co/ctheodoris/Geneformer) | a model folder with `config.json` and the weights (the top level of a full clone is the V2 104M-parameter model used for the manuscript; the sub-folders hold the other sizes); the tokenizer and the token dictionaries come from the installed Geneformer package (`stages.extract.geneformer.model_version` selects V1/V2 dictionaries) |
-| C2S-Scale | [Hugging Face: vandijklab](https://huggingface.co/vandijklab) | model name or local path |
+| C2S-Scale | [Hugging Face: vandijklab/C2S-Scale-Gemma-2-2B](https://huggingface.co/vandijklab/C2S-Scale-Gemma-2-2B) | a local model folder (`config.json`, `tokenizer.model`, safetensors weights; `huggingface-cli download vandijklab/C2S-Scale-Gemma-2-2B --local-dir <folder>`). The 2B model loads in float32 (about 10 GB of GPU memory) unless `stages.extract.c2s_scale.model_dtype` says otherwise |
 
 Check each model's license before use. See [data and configuration formats](data.md) for the expected AnnData fields.
 
