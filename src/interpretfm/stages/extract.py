@@ -97,6 +97,7 @@ def extract_fresh(ctx: StageContext) -> Dict[str, Any]:
             raise ExtractionError("stages.extract.device: cuda requested but no GPU is visible to this process "
                                   f"(CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES', 'unset')!r}, torch "
                                   f"{torch.__version__}); set device: cpu to extract on the CPU")
+    extractor.prepare(adata, spec, ctx.log)  # dataset-level state (C2S-Scale shard positions) before the subset
     idx, subset = select_cells([str(o) for o in adata.obs_names], ctx.params.get("cell_subset"), spec.seed)
     if idx is not None:
         adata = adata[idx].copy()

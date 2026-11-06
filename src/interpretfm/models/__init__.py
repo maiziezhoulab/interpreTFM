@@ -4,8 +4,8 @@
 :class:`interpretfm.models.base.ModelExtractor`; :func:`get_extractor` imports it lazily so
 that listing the names never loads a model stack. Available: ``scgpt`` (vendored scGPT,
 gene symbols), ``geneformer`` (Hugging Face Geneformer, Ensembl ids), ``toy`` (a synthetic
-model for tests and the tutorial, no weights). ``c2s_scale`` is registered but its adapter
-is not wired to this entry point yet.
+model for tests and the tutorial, no weights), ``c2s_scale`` (Hugging Face Gemma-2 C2S-Scale,
+cell sentences of gene symbols).
 """
 from __future__ import annotations
 

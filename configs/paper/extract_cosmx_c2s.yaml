@@ -1,0 +1,49 @@
+# Fresh extraction check: CosMx lung-cancer section, C2S-Scale (Gemma-2 2B, a local copy of
+# vandijklab/C2S-Scale-Gemma-2-2B), layer `layer_13`, on a seeded subset of 2,000 cells, inside the
+# C2S environment on a GPU. The reproduction test `tests/reproduction/test_extraction_c2s.py`
+# (INTERPRETFM_REPRO_GPU=1) compares the rows with the manuscript's cached store
+# (`acts_extraction_c2s_cosmx_store`) and the cell-level projection through the cached SAE.
+#   interpretfm run configs/paper/extract_cosmx_c2s.yaml --env-file configs/paper/paths.env --stages ingest,extract
+# Placeholders: INTERPRETFM_C2S_ENV is the conda environment of envs/c2s.yml; INTERPRETFM_C2S_MODEL
+# the model folder (config.json, tokenizer and safetensors weights).
+
+run:
+  name: extract_cosmx_c2s
+  out_dir: ${INTERPRETFM_RUNS}/extract_cosmx_c2s
+  seed: 0
+
+dataset:
+  h5ad: ${INTERPRETFM_DATA}/cosmx_human_lung_sec8.h5ad   # 81,236 cells x 960 genes, X = raw counts
+  counts_layer: null
+  gene_id: {column: index, kind: ensembl}                 # var_names are Ensembl ids; the sentences use var["feature_name"]
+  labels: {column: author_cell_type, groups: cosmx_author_groups.csv}
+  spatial: {obsm: spatial, um_per_unit: 0.18}
+  qc: {min_transcripts: 0, min_genes: 0}
+
+model:
+  name: c2s_scale
+  checkpoint: ${INTERPRETFM_C2S_MODEL}
+  env: {conda: "${INTERPRETFM_C2S_ENV}"}
+  layers: [layer_13]
+  cell_pooling: {kind: mean}                              # mean over the cell's gene rows (no cell-level token)
+  special_tokens: []                                      # stored token ids are gene symbols
+  representative_layer: layer_13
+
+stages:
+  # The manuscript's extraction settings: cell sentences of at most 256 genes ranked by raw count (ties broken
+  # per cell by seed 42 + the cell's position within its shard, the shards of the dataset's `shards` column),
+  # the cell2sentence cell-type-prediction prompt, 4 cells per forward pass, the model in float32, the hidden
+  # state of each gene's last sub-token pooled in float32 and stored as float16.
+  extract:
+    cell_subset: 2000
+    batch_size: 4
+    dtype: float16
+    rows_per_shard: 200000
+    device: cuda
+    gene_keys: {symbol_column: feature_name}
+    c2s_scale: {max_genes: 256, token_pooling: last, model_dtype: float32, tie_seed: 42, shard_column: shards}
+
+output:
+  html: false
+  json: true
+  keep_store: true

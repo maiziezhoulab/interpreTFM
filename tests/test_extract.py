@@ -96,8 +96,7 @@ def test_adapter_registry():
     assert get_extractor("toy").name == "toy" and get_extractor("SCGPT").name == "scgpt"
     with pytest.raises(ExtractionError, match="no extraction adapter"):
         get_extractor("llama")
-    with pytest.raises(ExtractionError, match="not wired"):
-        get_extractor("c2s_scale").check(None, None)  # refuses before looking at the specification
+    assert get_extractor("c2s_scale").name == "c2s_scale"
 
 
 def test_layer_manifest_counts(tmp_path):
