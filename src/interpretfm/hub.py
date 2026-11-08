@@ -278,6 +278,8 @@ def write_index(out_dir: Union[str, Path], repo_id: str = DEFAULT_REPO) -> Path:
              "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         lines.append("| " + " | ".join(str(x) for x in r) + " |")
+    lines += ["", "The tutorial of the repository (`docs/tutorials/cosmx_crop.ipynb`) reads the derived files in `tutorial/` "
+              "with `interpretfm.hub.tutorial_bundle` and builds its CosMx crop locally with `interpretfm.hub.tutorial_crop`."]
     lines += ["", "Licence: GPL-3.0-or-later (the licence of interpreTFM). The base models and datasets keep their own licences; "
               "see each model card.", ""]
     path = out_dir / CARD_FILE

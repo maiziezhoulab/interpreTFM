@@ -51,7 +51,7 @@ The `Containers` workflow (`.github/workflows/containers.yml`) is started by han
 ## 7. Hugging Face: trained SAEs and the tutorial bundle
 
 1. Export the finished run directories (one folder per model, dataset and layer, with the model cards): `interpretfm hub export <run_dir…> <export_dir> --repo-id YunfeiHu/interpreTFM`, then `interpretfm hub verify <run_dir…> <export_dir>`.
-2. Put the tutorial bundle beside the export: `<export_dir>/tutorial/` (the CosMx crop, its projected features, the store slice, the label groups and its `README.md`); the tutorial loads it with `interpretfm.hub.tutorial_bundle("hub", repo_id=...)`.
+2. Put the tutorial bundle beside the export: `<export_dir>/tutorial/` (the projected features, the store slice, the label groups and its `README.md`; no CosMx crop: the tutorial builds it with `interpretfm.hub.tutorial_crop` from the public source); the tutorial loads it with `interpretfm.hub.tutorial_bundle("hub", repo_id=...)`.
 3. Create the model repository and upload (needs `huggingface_hub` and a write token, `huggingface-cli login`):
 
    ```bash
