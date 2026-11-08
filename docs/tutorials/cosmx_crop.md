@@ -8,7 +8,7 @@ This notebook runs the spatial stages of the interpreTFM pipeline on a small cro
 
 A last, optional section shows how activations are extracted from scGPT on a GPU.
 
-The data come as one bundle from either a local folder or the Hugging Face repository of the release (`SOURCE` below). On Colab, run the next cell first to install the package.
+The CosMx crop itself is built on your machine from the public source file (a download of about 3.7 GB, once); the files derived from it (the projected features, a slice of the activation store and the SAE) come as one bundle from either a local folder or the Hugging Face repository of the release (`SOURCE` below). On Colab, run the next cell first to install the package.
 
 
 ```python
@@ -20,9 +20,9 @@ if ON_COLAB:  # a plain CPU install: PyTorch from the CPU index, then the packag
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "interpretfm[hub] @ git+https://github.com/OliiverHu/interpreTFM.git"], check=True)
 ```
 
-## 1. The data bundle and the SAE
+## 1. The data, the bundle and the SAE
 
-`interpretfm.hub.tutorial_bundle` returns the root folder of the bundle. With `SOURCE = "local"` it is the folder `BUNDLE` (the bundle of the release, downloaded by hand or built from the run directories); with `SOURCE = "hub"` the files are fetched from the Hugging Face repository `REPO_ID` (the placeholder is replaced by the published repository id).
+`interpretfm.hub.tutorial_bundle` returns the root folder of the bundle: the SAE features of the crop cells, one shard of the activation store, the label groups and the exported SAE. With `SOURCE = "local"` it is the folder `BUNDLE` (the bundle of the release, downloaded by hand or built from the run directories); with `SOURCE = "hub"` the files are fetched from the Hugging Face repository `REPO_ID`.
 
 
 ```python
@@ -39,7 +39,7 @@ from interpretfm import hub
 
 SOURCE = "local"                                       # "local" or "hub"
 BUNDLE = os.environ.get("INTERPRETFM_TUTORIAL_BUNDLE", "interpretfm_tutorial_bundle")
-REPO_ID = hub.DEFAULT_REPO                             # "<hf-user>/interpretfm-v1" until the release is published
+REPO_ID = hub.DEFAULT_REPO
 MODEL, LAYER, DATASET = "scgpt", "layer_1.norm2", "cosmx"
 
 root = hub.tutorial_bundle(SOURCE, path=BUNDLE, repo_id=REPO_ID)
@@ -57,16 +57,18 @@ sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
      'tutorial/README.md',
      'tutorial/cells_layer_1.norm2.h5ad',
      'tutorial/cosmx_author_groups.csv',
-     'tutorial/cosmx_crop.h5ad',
      'tutorial/store/activations/layer_1.norm2/shard_0/activations.pt',
      'tutorial/store/activations/layer_1.norm2/shard_0/index.pt',
      'tutorial/store/activations/layer_1.norm2/shard_0/metadata.json']
 
 
 
+The CosMx data carry no explicit licence, so the crop is not distributed with the release. `interpretfm.hub.tutorial_crop` builds it here from the public source file: the processed NanoString CosMx human NSCLC dataset of the Nicheformer data release (`theislab/SpatialCorpus-110M` on the Hugging Face Hub, file `nanostring_lung_annotated.h5ad` at a pinned revision). The first call downloads the file (about 3.7 GB, once, into the Hugging Face cache; set `INTERPRETFM_COSMX_SOURCE` to a local copy to skip the download), reads only the cells of section 8 inside the 4,500 × 4,500 px window, checks them against the manuscript's crop and writes the crop to `CROP`; later calls read `CROP` and never open the source again. When you use the data, cite He *et al.*, *Nat Biotechnol* 40, 1794–1806 (2022), NanoString / Bruker Spatial and the Nicheformer data release (see the bundle's `tutorial/README.md`).
+
 
 ```python
-crop = ad.read_h5ad(root / "tutorial" / "cosmx_crop.h5ad")
+CROP = Path("tutorial_run") / "cosmx_crop.h5ad"       # the locally built crop, reused by later calls
+crop = hub.tutorial_crop(path=CROP)                    # source: INTERPRETFM_COSMX_SOURCE, else the pinned download
 print(crop)
 print("raw counts:", crop.X[:3].sum(1).A.ravel(), "| µm per pixel:", crop.uns["interpretfm_tutorial"]["um_per_unit"])
 crop.obs["author_cell_type"].value_counts().head(8)
@@ -112,7 +114,7 @@ plt.show()
 
 
     
-![png](cosmx_crop_files/cosmx_crop_5_0.png)
+![png](cosmx_crop_files/cosmx_crop_6_0.png)
     
 
 
@@ -406,7 +408,7 @@ run_root.mkdir(exist_ok=True)
 rel = lambda p: os.path.relpath(p, run_root)
 config = {
     "run": {"name": "cosmx_crop", "out_dir": "runs/cosmx_crop", "seed": 0},
-    "dataset": {"h5ad": rel(root / "tutorial/cosmx_crop.h5ad"), "counts_layer": None,
+    "dataset": {"h5ad": rel(CROP), "counts_layer": None,
                 "gene_id": {"column": "index", "kind": "ensembl"},
                 "labels": {"column": "author_cell_type", "groups": rel(root / "tutorial/cosmx_author_groups.csv")},
                 "spatial": {"obsm": "spatial", "um_per_unit": 0.18}, "qc": {"min_transcripts": 0, "min_genes": 0}},
@@ -442,14 +444,14 @@ print(cfg_path.read_text()[:600], "...")
       out_dir: runs/cosmx_crop
       seed: 0
     dataset:
-      h5ad: ../../../runs/tutorial_bundle/tutorial/cosmx_crop.h5ad
+      h5ad: cosmx_crop.h5ad
       counts_layer: null
       gene_id:
         column: index
         kind: ensembl
       labels:
         column: author_cell_type
-        groups: ../../../runs/tutorial_bundle/tutorial/cosmx_author_groups.csv
+        groups: ../interpretfm_tutorial_bundle/tutorial/cosmx_author_groups.csv
       spatial:
         obsm: spatial
         um_per_unit: 0.18
@@ -467,7 +469,11 @@ print(cfg_path.read_text()[:600], "...")
         kind: token
         token: '60695'
       special_tokens:
-      - ...
+      - '60694'
+      - '60695'
+    stages:
+      niches:
+        c ...
 
 
 `interpretfm validate` checks the configuration and the files it names; `interpretfm run --stages ...` runs the stages in order, caching each one in the run directory (a second call skips finished stages). The same commands work from a shell: `interpretfm validate tutorial_run/cosmx_crop.yaml` and `interpretfm run tutorial_run/cosmx_crop.yaml --stages ingest,niches,interfaces,lr_screen,report`.
@@ -492,7 +498,7 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     INFO stage ingest: start (tutorial_run/runs/cosmx_crop/01_ingest)
 
 
-    INFO ingest: reading interpretfm_tutorial_bundle/tutorial/cosmx_crop.h5ad
+    INFO ingest: reading tutorial_run/cosmx_crop.h5ad
 
 
     WARNING ingest: vocabulary coverage not computed: no vocabulary given (set model.vocab to the model's gene vocabulary JSON)
@@ -512,7 +518,7 @@ main(["status", str(run_root / "runs/cosmx_crop")])
 
     OK: tutorial_run/cosmx_crop.yaml
       run: cosmx_crop -> tutorial_run/runs/cosmx_crop
-      dataset: interpretfm_tutorial_bundle/tutorial/cosmx_crop.h5ad [spatial]
+      dataset: tutorial_run/cosmx_crop.h5ad [spatial]
       model: scgpt, 1 layer(s), env: current
 
 
@@ -534,7 +540,7 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     INFO niches: layer_1.norm2: label composition (at_model_config, r 21.6 µm, k 3): ARI 0.173 / NMI 0.232
 
 
-    INFO stage niches: done in 108.0 s
+    INFO stage niches: done in 71.0 s
 
 
     INFO stage interfaces: start (tutorial_run/runs/cosmx_crop/11_interfaces)
@@ -612,9 +618,9 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     interfaces  core   done          no valid cached result
     lr_screen   core   done          no valid cached result
     report      core   done          no valid cached result
-    finished in 111 s
+    finished in 74 s
     stage      status   duration_s  started                    error
-    ingest     done            0.0  2026-11-06T17:24:51+00:00  
+    ingest     done            0.0  2026-11-08T05:55:51+00:00  
     extract    -                                               
     tis        -                                               
     sae        -                                               
@@ -623,10 +629,10 @@ main(["status", str(run_root / "runs/cosmx_crop")])
     gene_readout -                                               
     cells      -                                               
     layers     -                                               
-    niches     done          108.0  2026-11-06T17:24:51+00:00  
-    interfaces done            1.0  2026-11-06T17:26:39+00:00  
-    lr_screen  done            2.0  2026-11-06T17:26:40+00:00  
-    report     done            0.0  2026-11-06T17:26:42+00:00  
+    niches     done           71.0  2026-11-08T05:55:51+00:00  
+    interfaces done            1.0  2026-11-08T05:57:02+00:00  
+    lr_screen  done            2.0  2026-11-08T05:57:03+00:00  
+    report     done            0.0  2026-11-08T05:57:05+00:00  
 
 
 
@@ -765,7 +771,7 @@ plt.close(fig)
 
 
     
-![png](cosmx_crop_files/cosmx_crop_19_0.png)
+![png](cosmx_crop_files/cosmx_crop_20_0.png)
     
 
 
