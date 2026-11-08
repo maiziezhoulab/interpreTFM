@@ -16,14 +16,22 @@ prefix of the run name, ``cosmx`` or ``xenium`` for the manuscript's runs) with
 The folder is what ``huggingface-cli upload <repo-id> <out_dir>`` publishes; nothing here uploads.
 :func:`load_sae` reads a layer back from a local folder or, with ``huggingface_hub`` installed,
 from the repository, as a checkpoint dict that :class:`interpretfm.sae.Encoder` accepts.
+
+The tutorial's files come in two parts: :func:`tutorial_bundle` returns the derived files (the projected
+features of the crop cells, a slice of the activation store, the label groups and the exported SAE), and
+:func:`tutorial_crop` builds the CosMx crop itself on the user's machine from the public source file
+(:data:`COSMX_SOURCE`), because the CosMx data carry no explicit licence and the crop is not re-hosted.
 """
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import logging
+import os
 import shutil
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import yaml
 
@@ -431,23 +439,279 @@ def load_features(repo_or_path: Union[str, Path], model: str, layer: str, datase
     return pd.read_csv(layer_dir(repo_or_path, model, layer, dataset=dataset, **kw) / FEATURES_FILE)
 
 
-TUTORIAL_FILES = ("tutorial/*", "scgpt/cosmx/layer_1.norm2/*")
+# --- tutorial data -----------------------------------------------------------------------------
+
+#: Files of the tutorial bundle in the Hugging Face repository: the derived files only (the projected SAE features of
+#: the crop cells, one shard of the activation store restricted to some of them, the label groups, the bundle's README)
+#: and the exported SAE. The CosMx crop itself is not part of the bundle; :func:`tutorial_crop` builds it locally.
+TUTORIAL_FILES = ("tutorial/README.md", "tutorial/cells_layer_1.norm2.h5ad", "tutorial/cosmx_author_groups.csv",
+                  "tutorial/store/*", "scgpt/cosmx/layer_1.norm2/*")
+#: The file whose presence marks a tutorial bundle folder.
+TUTORIAL_MARKER = "tutorial/cells_layer_1.norm2.h5ad"
+
+#: Public source of the tutorial's CosMx crop: the processed NanoString CosMx SMI human NSCLC dataset (all eight
+#: sections, 771,236 cells x 960 genes) of the Nicheformer data release on the Hugging Face Hub, pinned to one revision.
+COSMX_SOURCE: Dict[str, Any] = {
+    "repo_id": "theislab/SpatialCorpus-110M",
+    "repo_type": "dataset",
+    "filename": "nanostring_lung_annotated.h5ad",
+    "revision": "5494a62f93d612cbc8a4ef773dc82f6b1e7a1218",
+    "size": 3693893108,
+    "sha256": "28d47fbb21dd8a40e990f2ddc99aeb15081de70f9b4b3a44360a98ad74ac311a",
+}
+#: Environment variable naming a local copy of the source file (used instead of the download).
+COSMX_SOURCE_ENV = "INTERPRETFM_COSMX_SOURCE"
+#: The manuscript's CosMx section (donor Lung13, "section 8") in the source file: ``obs['library_key'] == 7``.
+TUTORIAL_LIBRARY_KEY = 7
+#: The tutorial window ``(x0, y0, side)`` in pixels of ``obsm['spatial']`` (0.18 µm per pixel): a cell of the section is
+#: in the crop when ``x0 <= x < x0 + side`` and ``y0 <= y < y0 + side``. The window is 4,500 px (810 µm) wide; its corner
+#: is the section's smallest x plus 3 x 2,250 px and its smallest y plus 7 x 2,250 px.
+TUTORIAL_WINDOW_PX: Tuple[float, float, float] = (-31355.6666666667, 11985.777777777781, 4500.0)
+#: The ``obs`` and ``var`` columns the crop keeps.
+TUTORIAL_OBS_COLUMNS = ("author_cell_type", "Width", "Height", "cell_ID", "niche")
+TUTORIAL_VAR_COLUMNS = ("feature_name",)
+TUTORIAL_UM_PER_UNIT = 0.18
+#: Default file name of the built crop.
+TUTORIAL_CROP_FILE = "cosmx_crop.h5ad"
+#: Number of cells and content digest (:func:`crop_digest`) of the tutorial crop built from the pinned source.
+TUTORIAL_CROP_CELLS = 2822
+TUTORIAL_CROP_DIGEST = "4654eae9a431798216c1042f07df2c397bc810791ef0ab5e5c58b2783c3a793d"
+
+_log = logging.getLogger("interpretfm")
+
+
+def cosmx_source(source: Optional[Union[str, Path]] = None, revision: str = COSMX_SOURCE["revision"],
+                 cache_dir: Optional[Union[str, Path]] = None) -> Path:
+    """Local path of the CosMx source file of the tutorial crop.
+
+    ``source`` (a local copy of ``nanostring_lung_annotated.h5ad``), else the environment variable
+    ``INTERPRETFM_COSMX_SOURCE``, else the pinned file of :data:`COSMX_SOURCE` downloaded from the Hugging Face Hub
+    with ``huggingface_hub`` (about 3.7 GB, once; it stays in the Hugging Face cache, ``cache_dir`` if given, and can be
+    deleted after the crop is built).
+    """
+    if source is None:
+        source = os.environ.get(COSMX_SOURCE_ENV) or None
+    if source is not None:
+        path = Path(source).expanduser()
+        if not path.is_file():
+            raise FileNotFoundError(f"CosMx source file not found: {path}")
+        return path
+    try:
+        from huggingface_hub import hf_hub_download
+    except ImportError as e:  # pragma: no cover
+        raise ImportError("downloading the CosMx source needs the huggingface_hub package (pip install huggingface_hub), "
+                          f"or set {COSMX_SOURCE_ENV} to a local copy of {COSMX_SOURCE['filename']}") from e
+    _log.info("downloading %s/%s (revision %s, about %.1f GB, once)", COSMX_SOURCE["repo_id"], COSMX_SOURCE["filename"],
+              revision[:7], COSMX_SOURCE["size"] / 1e9)
+    return Path(hf_hub_download(repo_id=COSMX_SOURCE["repo_id"], repo_type=COSMX_SOURCE["repo_type"],
+                                filename=COSMX_SOURCE["filename"], revision=revision,
+                                cache_dir=str(cache_dir) if cache_dir is not None else None))
+
+
+def _decode(values: Any) -> Any:
+    import numpy as np
+
+    values = np.asarray(values)
+    if values.dtype.kind in ("O", "S"):
+        return np.array([v.decode("utf-8") if isinstance(v, bytes) else v for v in values], dtype=object)
+    return values
+
+
+def _read_elem(elem: Any) -> Any:
+    try:
+        from anndata.io import read_elem
+    except ImportError:
+        from anndata.experimental import read_elem
+    return read_elem(elem)
+
+
+def _read_column(elem: Any, lo: int, hi: int) -> Any:
+    """Rows ``lo:hi`` of one ``obs``/``var`` column of an h5ad file: a numpy array or a ``pandas.Categorical``
+    (with all categories of the file)."""
+    import h5py
+    import pandas as pd
+
+    enc = elem.attrs.get("encoding-type", "")
+    enc = enc.decode() if isinstance(enc, bytes) else enc
+    if isinstance(elem, h5py.Group) and enc == "categorical":
+        return pd.Categorical.from_codes(elem["codes"][lo:hi], categories=_decode(elem["categories"][()]),
+                                         ordered=bool(elem.attrs.get("ordered", False)))
+    if isinstance(elem, h5py.Dataset) and enc in ("", "array", "string-array"):
+        return _decode(elem[lo:hi])
+    return _read_elem(elem)[lo:hi]  # other encodings (nullable arrays, ...)
+
+
+def _csr_rows(X: Any, rows: Any, n_vars: int) -> Any:
+    """Rows ``rows`` (sorted) of the h5ad matrix ``X`` as a CSR matrix, reading only these rows."""
+    import h5py
+    import numpy as np
+    import scipy.sparse as sp
+
+    if isinstance(X, h5py.Dataset):
+        return sp.csr_matrix(X[rows.tolist(), :])
+    enc = X.attrs.get("encoding-type", X.attrs.get("h5sparse_format", ""))
+    enc = enc.decode() if isinstance(enc, bytes) else enc
+    if enc not in ("csr_matrix", "csr"):
+        raise ValueError(f"X is stored as {enc!r}; reading a window needs a CSR or dense matrix")
+    indptr = X["indptr"]
+    starts = indptr[rows.min():rows.max() + 2].astype(np.int64)
+    ends = starts[rows - rows.min() + 1]
+    starts = starts[rows - rows.min()]
+    data, indices = [], []
+    for run in np.split(np.arange(len(rows)), np.flatnonzero(np.diff(rows) != 1) + 1):  # consecutive rows: one read
+        a, b = int(starts[run[0]]), int(ends[run[-1]])
+        data.append(X["data"][a:b])
+        indices.append(X["indices"][a:b])
+    new_indptr = np.concatenate([[0], np.cumsum(ends - starts)])
+    index_dtype = np.int32 if new_indptr[-1] < np.iinfo(np.int32).max else np.int64
+    return sp.csr_matrix((np.concatenate(data), np.concatenate(indices).astype(index_dtype), new_indptr.astype(index_dtype)),
+                         shape=(len(rows), n_vars))
+
+
+def crop_section(h5ad: Union[str, Path], library_key: Any = TUTORIAL_LIBRARY_KEY,
+                 window_px: Sequence[float] = TUTORIAL_WINDOW_PX, obs_columns: Sequence[str] = TUTORIAL_OBS_COLUMNS,
+                 var_columns: Sequence[str] = TUTORIAL_VAR_COLUMNS, um_per_unit: float = TUTORIAL_UM_PER_UNIT):
+    """One square window of one section of an h5ad file, read without loading the rest of the file.
+
+    The section is ``obs['library_key'] == library_key``; the window ``(x0, y0, side)`` keeps the cells with
+    ``x0 <= x < x0 + side`` and ``y0 <= y < y0 + side`` (``obsm['spatial']``, first two columns), in the file's order.
+    Returns an AnnData with ``X`` (as stored, CSR), the ``obs`` columns ``obs_columns`` (categorical columns keep the
+    categories that occur in the section, as when the section is subset with anndata), the ``var`` columns
+    ``var_columns``, ``obsm['spatial']`` (float64) and ``uns['interpretfm_tutorial']`` (source note, µm per unit,
+    window).
+    """
+    import anndata as ad
+    import h5py
+    import numpy as np
+    import pandas as pd
+
+    x0, y0, side = (float(v) for v in window_px)
+    with h5py.File(h5ad, "r") as f:
+        obs, var = f["obs"], f["var"]
+        n_obs = int(f["obsm"]["spatial"].shape[0])
+        lib = np.asarray(_read_column(obs["library_key"], 0, n_obs))
+        in_section = lib == library_key if lib.dtype.kind in "iuf" else lib.astype(str) == str(library_key)
+        section = np.flatnonzero(in_section)
+        if not len(section):
+            raise ValueError(f"{h5ad}: no cell with obs['library_key'] == {library_key!r}")
+        lo, hi = int(section.min()), int(section.max()) + 1
+        xy = np.asarray(f["obsm"]["spatial"][lo:hi], dtype=float)[section - lo, :2]
+        inside = (xy[:, 0] >= x0) & (xy[:, 0] < x0 + side) & (xy[:, 1] >= y0) & (xy[:, 1] < y0 + side)
+        pos = np.flatnonzero(inside)  # positions within the section
+        if not len(pos):
+            raise ValueError(f"{h5ad}: no cell of section {library_key!r} in the window {tuple(window_px)}")
+        rows = section[pos]
+        obs_names = _decode(obs[obs.attrs["_index"]][lo:hi])[section - lo][pos]
+        cols = {}
+        for name in obs_columns:
+            col = _read_column(obs[name], lo, hi)
+            if isinstance(col, pd.Categorical):
+                col = col[section - lo].remove_unused_categories()[pos]
+            else:
+                col = np.asarray(col)[section - lo][pos]
+            cols[name] = col
+        n_vars = int(var[var.attrs["_index"]].shape[0])
+        var_names = _decode(var[var.attrs["_index"]][()])
+        var_df = pd.DataFrame({name: _read_column(var[name], 0, n_vars) for name in var_columns}, index=pd.Index(var_names))
+        X = _csr_rows(f["X"], rows, n_vars)
+    crop = ad.AnnData(X=X, obs=pd.DataFrame(cols, index=pd.Index(obs_names)), var=var_df)
+    crop.obsm["spatial"] = xy[pos]
+    crop.uns["interpretfm_tutorial"] = {
+        "source": "CosMx human NSCLC section 8 (public NanoString data), spatial crop",
+        "um_per_unit": float(um_per_unit), "window_px": np.array([x0, y0, side], dtype=float),
+        "source_release": f"{COSMX_SOURCE['repo_id']}/{COSMX_SOURCE['filename']}",
+        "library_key": str(library_key),
+    }
+    return crop
+
+
+def crop_digest(adata: Any) -> str:
+    """sha256 over the crop's cell and gene ids, counts (CSR arrays), coordinates and author cell types."""
+    import numpy as np
+    import scipy.sparse as sp
+
+    h = hashlib.sha256()
+    h.update("\n".join(map(str, adata.obs_names)).encode())
+    h.update("\n".join(map(str, adata.var_names)).encode())
+    X = sp.csr_matrix(adata.X)
+    for arr, dt in ((X.indptr, "<i8"), (X.indices, "<i8"), (X.data, "<f4"), (adata.obsm["spatial"], "<f8")):
+        h.update(np.ascontiguousarray(arr, dtype=dt).tobytes())
+    h.update("\n".join(map(str, adata.obs["author_cell_type"])).encode())
+    return h.hexdigest()
+
+
+def _default_crop_path() -> Path:
+    root = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache")
+    return root / "interpretfm" / TUTORIAL_CROP_FILE
+
+
+def _same_window(adata: Any, library_key: Any, window_px: Sequence[float]) -> bool:
+    import numpy as np
+
+    meta = adata.uns.get("interpretfm_tutorial") or {}
+    w = meta.get("window_px")
+    return (w is not None and np.array_equal(np.asarray(w, dtype=float), np.asarray(window_px, dtype=float))
+            and str(meta.get("library_key", TUTORIAL_LIBRARY_KEY)) == str(library_key))
+
+
+def tutorial_crop(path: Optional[Union[str, Path]] = None, source: Optional[Union[str, Path]] = None,
+                  revision: str = COSMX_SOURCE["revision"], cache_dir: Optional[Union[str, Path]] = None,
+                  overwrite: bool = False, library_key: Any = TUTORIAL_LIBRARY_KEY,
+                  window_px: Sequence[float] = TUTORIAL_WINDOW_PX):
+    """The tutorial's CosMx crop (2,822 cells x 960 genes), built locally from the public source and cached.
+
+    The crop is a 4,500 x 4,500 px (810 x 810 µm) window (:data:`TUTORIAL_WINDOW_PX`) of the manuscript's section
+    (``library_key == 7``, donor Lung13) of the NanoString CosMx human NSCLC dataset, read from the source file of
+    :func:`cosmx_source`: ``source``, else ``INTERPRETFM_COSMX_SOURCE``, else the pinned file downloaded from the
+    Hugging Face Hub (about 3.7 GB, once). The crop has raw counts in ``X``, Ensembl ids as ``var_names``, symbols in
+    ``var['feature_name']``, author cell types in ``obs['author_cell_type']`` and pixel coordinates (0.18 µm per
+    pixel) in ``obsm['spatial']``; the coordinates are those of the whole section and the cell ids are kept.
+
+    The crop is written to ``path`` (default ``~/.cache/interpretfm/cosmx_crop.h5ad``) and read from there on later
+    calls without opening the source again (``overwrite=True`` rebuilds it). Building it reads only the window's rows of
+    the source and takes seconds once the file is on disk. The crop of the default window is checked against the
+    digest of the tutorial crop (:data:`TUTORIAL_CROP_DIGEST`). The CosMx data carry no explicit licence, so the crop is
+    built here instead of being distributed; cite the data as listed in the bundle's ``README.md``.
+    """
+    import anndata as ad
+
+    path = Path(path) if path is not None else _default_crop_path()
+    if path.exists() and not overwrite:
+        crop = ad.read_h5ad(path)
+        if _same_window(crop, library_key, window_px):
+            return crop
+        _log.info("%s holds another window; rebuilding it", path.name)
+    src = cosmx_source(source, revision=revision, cache_dir=cache_dir)
+    _log.info("building the tutorial crop from %s", src.name)
+    crop = crop_section(src, library_key=library_key, window_px=window_px)
+    is_default = str(library_key) == str(TUTORIAL_LIBRARY_KEY) and tuple(float(v) for v in window_px) == TUTORIAL_WINDOW_PX
+    if is_default and (crop.n_obs != TUTORIAL_CROP_CELLS or crop_digest(crop) != TUTORIAL_CROP_DIGEST):
+        raise ValueError(f"the crop built from {src.name} ({crop.n_obs} cells) differs from the tutorial crop "
+                         f"({TUTORIAL_CROP_CELLS} cells); use {COSMX_SOURCE['repo_id']}/{COSMX_SOURCE['filename']} at "
+                         f"revision {COSMX_SOURCE['revision']}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.stem + ".partial.h5ad")
+    crop.write_h5ad(tmp)
+    os.replace(tmp, path)
+    return ad.read_h5ad(path)
 
 
 def tutorial_bundle(source: str = "local", path: Optional[Union[str, Path]] = None, repo_id: str = DEFAULT_REPO,
                     revision: Optional[str] = None, cache_dir: Optional[Union[str, Path]] = None) -> Path:
-    """Root folder of the tutorial data (``tutorial/`` with the CosMx crop, its projected features, a store slice
-    and the label groups, beside the exported SAE ``scgpt/cosmx/layer_1.norm2/``).
+    """Root folder of the tutorial's derived files: ``tutorial/`` with the projected SAE features of the crop cells
+    (``cells_layer_1.norm2.h5ad``), a slice of the activation store (``store/``) and the label groups
+    (``cosmx_author_groups.csv``), beside the exported SAE ``scgpt/cosmx/layer_1.norm2/``. The CosMx crop itself is
+    not in the bundle; :func:`tutorial_crop` builds it from the public source.
 
     ``source="local"`` uses the folder ``path`` (a downloaded or self-built bundle); ``source="hub"`` downloads the
-    tutorial files of the Hugging Face repository ``repo_id`` with ``huggingface_hub``.
+    tutorial files (:data:`TUTORIAL_FILES`) of the Hugging Face repository ``repo_id`` with ``huggingface_hub``.
     """
     if source == "local":
         if path is None:
             raise ValueError("tutorial_bundle(source='local') needs path=<bundle folder>")
         root = Path(path)
-        if not (root / "tutorial" / "cosmx_crop.h5ad").exists():
-            raise FileNotFoundError(f"{root}: not a tutorial bundle (tutorial/cosmx_crop.h5ad missing)")
+        if not (root / TUTORIAL_MARKER).exists():
+            raise FileNotFoundError(f"{root}: not a tutorial bundle ({TUTORIAL_MARKER} missing)")
         return root
     if source != "hub":
         raise ValueError("source must be 'local' or 'hub'")
