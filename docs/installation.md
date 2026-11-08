@@ -65,7 +65,7 @@ Install PyTorch for your platform first (see [pytorch.org](https://pytorch.org))
 python -m pip install -e ".[models]"      # adds transformers, nnsight and datasets
 ```
 
-Optional extras: `hub` (`safetensors` and `huggingface_hub`, to export trained SAEs or load the published ones with `interpretfm.hub`), `annotation` (GO hierarchy tools used by `interp_pipeline.downstream.f1.go_reduce`), `docs` (documentation build) and `dev` (tests and linting).
+Optional extras: `hub` (`safetensors` and `huggingface_hub`, to export trained SAEs or load the published ones with `interpretfm.hub`, and to download the tutorial data), `annotation` (GO hierarchy tools used by `interp_pipeline.downstream.f1.go_reduce`), `docs` (documentation build) and `dev` (tests and linting).
 
 ## Model weights and data
 
