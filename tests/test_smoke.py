@@ -24,7 +24,7 @@ MODULES = sorted(m.name for m in pkgutil.walk_packages(interp_pipeline.__path__,
 
 
 def test_version():
-    assert interp_pipeline.__version__ == "1.0.0.dev0"
+    assert interp_pipeline.__version__ == "1.0.0"
 
 
 @pytest.mark.parametrize("name", MODULES)
