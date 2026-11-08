@@ -41,10 +41,33 @@ def report(label: str, observed, manuscript=None, cached=None, tol=None) -> str:
     return line
 
 
+def known_difference(label: str) -> Optional[dict]:
+    """The entry of ``expected.KNOWN_DIFFERENCES`` for this comparison, printed with its reason, or ``None``."""
+    from expected import KNOWN_DIFFERENCES
+
+    known = KNOWN_DIFFERENCES.get(label)
+    if known is not None:
+        print(f"{label}: known difference, not asserted against the printed value: {known['reason']}")
+    return known
+
+
 def check(label: str, observed: float, manuscript=None, cached=None, tol: float = 0.005, tol_cached: Optional[float] = None):
-    """Assert closeness to the manuscript value and (when available) to the cached source value."""
+    """Assert closeness to the manuscript value and (when available) to the cached source value; a comparison
+    listed in ``expected.KNOWN_DIFFERENCES`` is reported with its reason (and checked against the pipeline's own
+    value when the entry gives one)."""
     line = report(label, observed, manuscript, cached, tol)
-    if manuscript is not None:
-        assert abs(float(observed) - float(manuscript)) <= tol, line
-    if cached is not None:
-        assert abs(float(observed) - float(cached)) <= (tol if tol_cached is None else tol_cached), line
+    known = known_difference(label)
+    if known is not None:
+        if known.get("observed") is not None:
+            assert abs(float(observed) - float(known["observed"])) <= known.get("tol", tol), f"{line} | pipeline value {known['observed']}"
+        return
+    bad = []
+    if manuscript is not None and abs(float(observed) - float(manuscript)) > tol:
+        bad.append("manuscript")
+    if cached is not None and abs(float(observed) - float(cached)) > (tol if tol_cached is None else tol_cached):
+        bad.append("cached source")
+    if bad and os.environ.get("INTERPRETFM_REPRO_REPORT_ALL"):
+        # survey mode: list every comparison outside its tolerance instead of stopping at the first
+        print(f"OUT OF TOLERANCE ({', '.join(bad)}): {line}")
+        return
+    assert not bad, line

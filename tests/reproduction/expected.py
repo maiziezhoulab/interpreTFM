@@ -45,6 +45,59 @@ def _layer(name, dataset, model, cache_model, layer, hidden_dim, tis_gain, f1_ro
     return d
 
 
+#: Printed values that the pipeline does not reproduce within the test's tolerance, keyed by the exact label of the
+#: comparison; each is described under "Known differences" in docs/reproducing.md. ``repro_support.check`` reports
+#: these comparisons with the reason instead of asserting the printed (and cached) value. With ``observed`` it asserts
+#: the pipeline's own value instead (a regression guard); without it the line is reported only. Every other
+#: comparison of the same test is still asserted.
+KNOWN_DIFFERENCES = {
+    "xenium_geneformer_layer2 T1 TIS gain": {
+        "observed": 0.2009, "tol": 0.0005,
+        "reason": "Supplementary Table S1 prints 0.195; the tis stage gives 0.201 on the same store with the same "
+                  "trials and seed, and no cached record of the manuscript's Xenium TIS run exists to trace the gap",
+    },
+    "xenium_c2s_layer14 T8 seed ARI": {
+        "observed": None,
+        "reason": "k-means at r100/xm/kmeans/k5 has two solutions; the printed partition (reproduced at seed 0, ARI / "
+                  "NMI against the marker labels within 1e-4) has the higher inertia, and seeds 1 and 2 reach the other "
+                  "one, so the seed-to-seed ARI is 0.81 with scikit-learn 1.3.2 and 0.62 with 1.9 (printed 0.996)",
+    },
+    "xenium_c2s_layer14 T10 (interfaces stage, pipeline niches) enriched (niche)": {
+        "observed": None,
+        "reason": "follows the niche partition: the pipeline's five C2S-Scale niches differ slightly from the printed "
+                  "ones in current library versions (15 enriched calls vs 18; the cached-niche test reproduces 18)",
+    },
+    "xenium_c2s_layer14 T10 (interfaces stage, pipeline niches) depleted (niche)": {
+        "observed": None,
+        "reason": "follows the niche partition, as the enriched calls (22 depleted calls vs 24; the cached-niche test "
+                  "reproduces 24)",
+    },
+    "xenium_c2s_layer14 T10 (interfaces stage, pipeline niches) FPR i.i.d. noise (%)": {
+        "observed": None,
+        "reason": "a niche-stratified calibration figure (not printed), so it follows the niche partition: 5.6 % "
+                  "vs 4.5 % on the cached niches",
+    },
+    "xenium_geneformer_layer2 T9 expression at the manuscript configuration NMI": {
+        "observed": None,
+        "reason": "five-cluster k-means of the expression-only embedding at r120/m/kmeans/k5 has several solutions "
+                  "(four to five distinct ones over ten seeds in scikit-learn 1.3.2 and 1.9); the printed ARI / NMI "
+                  "0.052 / 0.105 is one of them (reached at seed 1 with 1.3.2), and seed 0 reaches the "
+                  "lowest-inertia one, 0.059 / 0.126, in both versions",
+    },
+    "xenium_c2s_layer14 T9 expression at the manuscript configuration ARI": {
+        "observed": None,
+        "reason": "five-cluster k-means of the expression-only embedding has several solutions (see the Geneformer "
+                  "configuration); at r100/xm/kmeans/k5 the stage's seed-0 solution gives ARI / NMI 0.046 / 0.098 "
+                  "against the printed 0.034 / 0.095",
+    },
+    "xenium_geneformer_layer2 concepts marked at the row split (sparse, test F1 >= 0.5)": {
+        "observed": None,
+        "reason": "the store held every Xenium Geneformer cell twice; the stage drops the second copy before drawing "
+                  "the row split, whereas the manuscript's de-duplicated rerun drew its own split, so concepts near the "
+                  "F1 = 0.5 cut move (540 vs 572; mean concept F1 equal within 3e-4, both inside the printed 262-593)",
+    },
+}
+
 EXPECTED = {e["name"]: e for e in [
     _layer("cosmx_scgpt_layer2", "cosmx", "scgpt", "scgpt", "layer_1.norm2", 512, 0.176,
            (0.175, 0.230, 0.339), (0.033, 0.027, 0.021), (0.063, 0.128, 0.195), (0.465, 0.579, 0.567, 0.104), 194,

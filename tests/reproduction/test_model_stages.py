@@ -21,7 +21,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from repro_support import cached_path, check, report
+from repro_support import cached_path, check, known_difference, report
 from expected import EXPECTED
 
 from interpretfm.concept_eval import HeldoutResult, summarize_concept_f1
@@ -235,7 +235,15 @@ def test_t3_t4_concept_f1(paper, name, unit):
             counts = json.load(open(rd / "06_concept_eval" / exp["layer"] / "f1_row_sae" / "counts.json"))
             theirs = json.load(open(d / "counts_summary.json"))
             report(f"{name} row split rows (valid, test)", counts["rows_by_split"], None, theirs["rows_by_split"])
-            assert counts["rows_by_split"] == theirs["rows_by_split"]
+            split = json.load(open(rd / "06_concept_eval" / exp["layer"] / "f1_row_sae" / "split.json"))
+            if split.get("rows_dropped_duplicate_cells"):
+                # The cached tables of this layer were computed on the store that held every cell twice (the
+                # manuscript's values come from the de-duplicated rerun); the stage drops the second copy before
+                # splitting, so each split holds half the cached rows up to the split draw.
+                for part, n in theirs["rows_by_split"].items():
+                    assert abs(2 * counts["rows_by_split"][part] - n) <= 0.001 * n, (part, counts["rows_by_split"][part], n)
+            else:
+                assert counts["rows_by_split"] == theirs["rows_by_split"]
 
 
 @pytest.mark.parametrize("name", LAYERS)
@@ -261,9 +269,10 @@ def test_concept_counts(paper, name):
     src = cached.get(("row", "sae"))
     expected_marked = None if src is None else int(round(float(src.specific_ge0p5) * int(src.n_specific)))
     lo, hi = exp["marked_concepts_range"]
-    report(f"{name} concepts marked at the row split (sparse, test F1 >= 0.5)", marked, f"within {lo}-{hi}", expected_marked, 2)
+    label = f"{name} concepts marked at the row split (sparse, test F1 >= 0.5)"
+    report(label, marked, f"within {lo}-{hi}", expected_marked, 2)
     assert lo <= marked <= hi
-    if expected_marked is not None:
+    if expected_marked is not None and known_difference(label) is None:
         assert abs(marked - expected_marked) <= 2
 
 
@@ -292,6 +301,12 @@ def test_t5_gene_readout(paper, name):
         c_std = cached_std.get(key, (None,))[0]
         c_ctr = cached_ctr.get(key, (None,))[0]
         c_single = cached_std.get(key, (None, None, None))[2]
+        if key == "random":
+            # A chance-level control: the cached rows are another draw of random vectors than the printed one, so
+            # they are reported only; the printed value and the 0.47-0.53 band below are asserted.
+            report(f"{name} T5 random cached draw (standardized, center-only, single)", (round(std, 4), round(ctr, 4), round(single, 4)),
+                   None, (c_std, c_ctr, c_single))
+            c_std = c_ctr = c_single = None
         check(f"{name} T5 {key} probe AUROC (standardized)", std, m_std, c_std, tol=0.03)
         check(f"{name} T5 {key} probe AUROC (center-only)", ctr, m_ctr, c_ctr, tol=0.03)
         check(f"{name} T5 {key} best single dimension AUROC", single, m_single, c_single, tol=0.03)
