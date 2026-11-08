@@ -42,19 +42,19 @@ def report(label: str, observed, manuscript=None, cached=None, tol=None) -> str:
 
 
 def known_difference(label: str) -> Optional[dict]:
-    """The entry of ``expected.KNOWN_DIFFERENCES`` for this comparison, printed with its reason, or ``None``."""
+    """The entry of ``expected.KNOWN_DIFFERENCES`` for this comparison (printed), or ``None``."""
     from expected import KNOWN_DIFFERENCES
 
     known = KNOWN_DIFFERENCES.get(label)
     if known is not None:
-        print(f"{label}: known difference, not asserted against the printed value: {known['reason']}")
+        print(f"{label}: listed in KNOWN_DIFFERENCES, not asserted against the printed value ({known['note']})")
     return known
 
 
 def check(label: str, observed: float, manuscript=None, cached=None, tol: float = 0.005, tol_cached: Optional[float] = None):
     """Assert closeness to the manuscript value and (when available) to the cached source value; a comparison
-    listed in ``expected.KNOWN_DIFFERENCES`` is reported with its reason (and checked against the pipeline's own
-    value when the entry gives one)."""
+    listed in ``expected.KNOWN_DIFFERENCES`` is reported (and checked against the pipeline's own value when the
+    entry gives one)."""
     line = report(label, observed, manuscript, cached, tol)
     known = known_difference(label)
     if known is not None:

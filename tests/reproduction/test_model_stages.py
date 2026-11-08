@@ -237,9 +237,8 @@ def test_t3_t4_concept_f1(paper, name, unit):
             report(f"{name} row split rows (valid, test)", counts["rows_by_split"], None, theirs["rows_by_split"])
             split = json.load(open(rd / "06_concept_eval" / exp["layer"] / "f1_row_sae" / "split.json"))
             if split.get("rows_dropped_duplicate_cells"):
-                # The cached tables of this layer were computed on the store that held every cell twice (the
-                # manuscript's values come from the de-duplicated rerun); the stage drops the second copy before
-                # splitting, so each split holds half the cached rows up to the split draw.
+                # The stage drops duplicate cells before splitting (`dedup_cells: auto`); the cached tables of this
+                # layer keep them, so each split holds half the cached rows up to the split draw.
                 for part, n in theirs["rows_by_split"].items():
                     assert abs(2 * counts["rows_by_split"][part] - n) <= 0.001 * n, (part, counts["rows_by_split"][part], n)
             else:
