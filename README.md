@@ -27,7 +27,7 @@ Every measure is meant to be read next to its baseline, so that a feature-level 
 
 - `interpretfm`: the v1 pipeline. One command (`interpretfm run <config.yaml>`) runs every stage from one YAML configuration: input checks, activation extraction in the model's own environment, TIS, SAE training with the λ rule and the untrained control, the concept universe, held-out concept F1, the gene-level readout, feature retention and projection to cells, population specificity, the per-criterion layer table, spatial niches with their baselines, the calibrated interface test, the ligand–receptor co-localization screen and a self-contained HTML report with every metric beside its baseline. The manuscript's six representative layers are configurations in `configs/paper/`, with reproduction tests against the published numbers.
 - `interp_pipeline`: the analysis package of the manuscript (model adapters, the sharded activation store, TIS, held-out concept alignment, the 0.9 building blocks), which the pipeline builds on.
-- `interpretfm hub`: export of trained SAEs to a Hugging Face-ready folder (safetensors, feature table, metrics, model card) and `interpretfm.hub.load_sae` to load them.
+- `interpretfm hub`: export of trained SAEs to a Hugging Face-ready folder (safetensors, feature table, metrics, model card) and `interpretfm.hub.load_sae` to load them. The SAEs of the manuscript's six layers are published at <https://huggingface.co/YunfeiHu/interpreTFM>.
 - A CPU tutorial on a crop of the public CosMx section ([tutorial](https://interpretfm.readthedocs.io/en/latest/tutorials/cosmx_crop.html)).
 
 ## Installation
@@ -150,16 +150,15 @@ sphinx-build -b html docs docs/_build/html
 
 ## Citation
 
-The manuscript describing interpreTFM is in preparation. Until it is published, please cite the software ([`CITATION.cff`](CITATION.cff); GitHub's "Cite this repository" uses it):
+The manuscript describing interpreTFM is not yet published. Until it is, please cite the software ([`CITATION.cff`](CITATION.cff); GitHub's "Cite this repository" uses it):
 
 ```bibtex
 @software{interpretfm,
   author  = {Hu, Yunfei},
   title   = {{interpreTFM}: layer-resolved evaluation of transcriptomic foundation models},
-  version = {0.9.0},
+  version = {1.0.0},
   year    = {2026},
-  url     = {https://github.com/OliiverHu/interpreTFM},
-  note    = {Manuscript in preparation}
+  url     = {https://github.com/OliiverHu/interpreTFM}
 }
 ```
 

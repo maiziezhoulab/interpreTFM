@@ -4,4 +4,4 @@ Layer-resolved evaluation of transcriptomic foundation models with sparse autoen
 single-cell and targeted spatial data. See https://interpretfm.readthedocs.io.
 """
 
-__version__ = "1.0.0.dev0"
+__version__ = "1.0.0"
