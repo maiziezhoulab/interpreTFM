@@ -70,5 +70,4 @@ def test_export_reload_identical_and_public(tmp_path):
 def test_load_sae_missing_layer(tmp_path):
     with pytest.raises(FileNotFoundError):
         hub.load_sae(tmp_path, "scgpt", "layer_9")
-    with pytest.raises(ValueError):
-        hub.layer_dir(hub.DEFAULT_REPO, "scgpt", "layer_1.norm2")
+    assert hub.DEFAULT_REPO == "YunfeiHu/interpreTFM"  # the release repository (no network access here)

@@ -29,8 +29,8 @@ import yaml
 
 from interp_pipeline import __version__
 
-#: Placeholder repository id; replace it with the published repository.
-DEFAULT_REPO = "<hf-user>/interpretfm-v1"
+#: Hugging Face repository of the release (trained SAEs and the tutorial files); versions are tags (``v1.0.0``).
+DEFAULT_REPO = "YunfeiHu/interpreTFM"
 
 SAE_FILE = "sae.safetensors"
 CONFIG_FILE = "config.json"
@@ -46,7 +46,7 @@ MODEL_SOURCES: Dict[str, Dict[str, str]] = {
     "geneformer": {"display": "Geneformer", "source": "https://huggingface.co/ctheodoris/Geneformer (V2, 104M parameters)",
                    "license": "Apache-2.0"},
     "c2s_scale": {"display": "C2S-Scale", "source": "https://huggingface.co/vandijklab/C2S-Scale-Gemma-2-2B",
-                  "license": "see the model repository (Gemma terms of use)"},
+                  "license": "CC BY 4.0 for the C2S-Scale weights; built on Gemma 2, subject to the Gemma Terms of Use"},
 }
 
 #: Datasets of the manuscript, keyed by the prefix of the run name.
@@ -354,6 +354,16 @@ def model_card(info: Dict[str, Any], config: Dict[str, Any]) -> str:
         "## Licence", "",
         f"GPL-3.0-or-later (the SAE weights, tables and this card; the licence of interpreTFM). The base model keeps its own licence "
         f"({src['license']}); check it and the dataset's terms before use.", "",
+    ]
+    if info["model"] == "c2s_scale":
+        lines += [
+            "The SAE reads the hidden states of C2S-Scale-Gemma-2-2B by the van Dijk lab "
+            "(<https://huggingface.co/vandijklab/C2S-Scale-Gemma-2-2B>), whose weights are licensed under CC BY 4.0 "
+            "(<https://creativecommons.org/licenses/by/4.0/>); the model itself was not changed and is not redistributed here.", "",
+            "C2S-Scale-Gemma-2-2B is built on Gemma 2. Gemma is provided under and subject to the Gemma Terms of Use found at "
+            "<https://ai.google.dev/gemma/terms>.", "",
+        ]
+    lines += [
         "## Citation", "",
         "Cite the interpreTFM manuscript (in preparation) and the software release (`CITATION.cff` of the repository, "
         "<https://github.com/OliiverHu/interpreTFM>).", "",
@@ -390,8 +400,6 @@ def layer_dir(repo_or_path: Union[str, Path], model: str, layer: str, dataset: O
     root = Path(repo_or_path)
     if root.exists():
         return _find_layer(root, model, layer, dataset)
-    if str(repo_or_path) == DEFAULT_REPO:
-        raise ValueError(f"the repository id is the placeholder {DEFAULT_REPO!r}; pass the published repository or a local folder")
     try:
         from huggingface_hub import snapshot_download
     except ImportError as e:  # pragma: no cover
@@ -443,8 +451,6 @@ def tutorial_bundle(source: str = "local", path: Optional[Union[str, Path]] = No
         return root
     if source != "hub":
         raise ValueError("source must be 'local' or 'hub'")
-    if repo_id == DEFAULT_REPO:
-        raise ValueError(f"the repository id is the placeholder {DEFAULT_REPO!r}; pass the published repository")
     from huggingface_hub import snapshot_download
 
     return Path(snapshot_download(repo_id=repo_id, revision=revision, cache_dir=cache_dir, allow_patterns=list(TUTORIAL_FILES)))

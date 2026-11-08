@@ -65,7 +65,7 @@ def _parser() -> argparse.ArgumentParser:
     he = hsub.add_parser("export", help="write <out_dir>/<model>/<dataset>/<layer>/ (safetensors, config, features, metrics, model card) per run")
     he.add_argument("run_dirs", nargs="+", metavar="run_dir", help="finished run directories (the last argument is out_dir)")
     he.add_argument("--layers", help="comma-separated subset of model.layers (default: all)")
-    he.add_argument("--repo-id", default=None, help="repository id written into the cards (default: a placeholder)")
+    he.add_argument("--repo-id", default=None, help="repository id written into the cards (default: the release repository, YunfeiHu/interpreTFM)")
     hv = hsub.add_parser("verify", help="reload every exported layer of the runs and compare it with the run's checkpoint")
     hv.add_argument("run_dirs", nargs="+", metavar="run_dir", help="run directories (the last argument is the export folder)")
 

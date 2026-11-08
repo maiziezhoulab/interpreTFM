@@ -55,9 +55,9 @@ Loading, from a local export or from the Hub (the extra `hub` installs `safetens
 from interpretfm.hub import load_sae, load_features
 from interpretfm.sae import Encoder
 
-ckpt = load_sae("<user>/interpretfm-v1", model="scgpt", layer="layer_1.norm2", dataset="cosmx")  # or a local folder
+ckpt = load_sae("YunfeiHu/interpreTFM", model="scgpt", layer="layer_1.norm2", dataset="cosmx")  # or a local folder
 encoder = Encoder(ckpt)                 # encoder.encode(rows) -> features
-features = load_features("<user>/interpretfm-v1", "scgpt", "layer_1.norm2", dataset="cosmx")
+features = load_features("YunfeiHu/interpreTFM", "scgpt", "layer_1.norm2", dataset="cosmx")
 ```
 
 A published SAE can also be given to the `sae` stage of a new run through `stages.sae.checkpoints` after converting it back to a `.pt` checkpoint (`torch.save(load_sae(...), path)`), so that the later stages evaluate it on a new store.
