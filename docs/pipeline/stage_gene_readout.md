@@ -14,6 +14,16 @@ Controls, scored on the same genes, splits and concepts:
 - `celltype`: mean log-normalized expression per cell type (types with at least `min_type_cells` cells), z-scored per gene across types; needs `dataset.labels`;
 - `trivial`: mean expression and detection rate.
 
+Gene-symbol controls and further representations (all optional; the paper configurations `readout_controls_<layer>.yaml` use them for the post hoc rows of Supplementary Table S3):
+
+- `names_tri` (in `controls`): each gene symbol's binary profile of character trigrams (upper case, padded with `^` and `$`: `KRT5` gives `^KR`, `KRT`, `RT5`, `T5$`) over the trigrams that occur among the scored genes;
+- `names_pc50` (in `controls`): the first `n_pcs` principal components of the column-centred trigram matrix;
+- `symbol_residuals`: representation kinds (`hidden`, `sae`, `untrained`, a control or a store name) that are also scored after removing the part linearly predictable from `names_pc50`: on every split, a least-squares fit with an intercept on the split's training genes, applied to all genes; named `<representation>|symbol_removed`;
+- `stores`: further activation stores of the same model (`{<name>: <store root>}`, for example of a randomly re-initialized model, [stage extract](stage_extract.md#randomly-re-initialized-weights)); the mean hidden state of every gene in such a store is scored as `<name>|<layer>`, and a gene is scored only when it is observed in every store;
+- `representations`: which of `hidden`, `sae` and `untrained` are scored (all three by default);
+- `universe`: a file of gene keys (one per line, `#` comments); only these genes are scored (those not observed in every store are left out and listed in `splits.json`);
+- `split.first_from`: a whole-gene held-out split (JSON with `train_genes`, `valid_genes`, `test_genes`, as written by a concept evaluation) that gives split `s0`, restricted to the scored genes; the other splits are drawn with seeds `seed + 1`, ....
+
 ## Parameters (`stages.gene_readout`)
 
 | key | default | meaning |
@@ -21,9 +31,13 @@ Controls, scored on the same genes, splits and concepts:
 | `n_splits` | 5 | whole-gene folds |
 | `C` | 1.0 | inverse regularization strength |
 | `scaling` | `[standardize, center]` | input scaling variants reported |
-| `controls` | `[random, coexpression, coexpression_pc50, celltype, trivial]` | |
+| `controls` | `[random, coexpression, coexpression_pc50, celltype, trivial]` | also `names_tri`, `names_pc50` |
+| `representations` | `[hidden, sae, untrained]` | the model representations scored |
+| `stores` | – | `{<name>: <store root>}`: further stores of the same model |
+| `symbol_residuals` | – | representation kinds also scored with the `names_pc50` part removed |
+| `universe` | – | a file of the gene keys to score |
 | `concept_size` | `[5, 100]` | concepts scored |
-| `split` | `{valid: 0.2, test: 0.1}` | the whole-gene split fractions |
+| `split` | `{valid: 0.2, test: 0.1}` | the whole-gene split fractions; `first_from`: a split file for `s0` |
 | `max_cells` | 100000 | cells used for the expression controls (random subset) |
 | `min_type_cells` | 50 | |
 | `n_pcs` | 50 | |
@@ -41,9 +55,12 @@ Controls, scored on the same genes, splits and concepts:
   gene_readout.csv              per representation and split
   per_concept.csv.gz            split, representation, family, concept, n_genes, single_dim, single_sign,
                                 single_train_auroc, single_test_auroc, probe_test_auroc_<scaling>
-  splits.json                   the gene universe and the test genes of every split
+  splits.json                   the gene universe and the test genes of every split (with universe: the file, the
+                                listed genes not observed; with split.first_from: the split file)
   expression_reps.npz           the expression controls over the panel
+  symbol_reps.npz               keys, names_tri, names_pc50, trigrams (with the gene-symbol controls)
   <layer>/gene_means.npz        keys, count, hidden, sae, untrained (genes x dimensions)
+  <layer>/gene_means_<name>.npz keys, count, hidden of every further store
 ```
 
-Representations are named `<kind>|<layer>` (`hidden|layer_1.norm2`) and controls `<control>|-`.
+Representations are named `<kind>|<layer>` (`hidden|layer_1.norm2`, `random_table|layer_1.norm2` for a store), controls `<control>|-`, and the symbol-removed variants `<representation>|symbol_removed`.

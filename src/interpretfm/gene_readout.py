@@ -14,11 +14,19 @@ Controls built from the expression matrix: each gene's co-expression profile (Pe
 correlation with every panel gene, or its first 50 principal components), its mean
 log-normalized expression per cell type (z-scored across types), its mean expression and
 detection rate (``trivial``), and random Gaussian vectors of the hidden dimension.
+
+Gene-symbol controls (:func:`symbol_representations`): each gene symbol's binary profile of
+character trigrams (``names_tri``) and its first 50 principal components (``names_pc50``).
+A representation can also be scored after removing the part linearly predictable from
+``names_pc50`` (:func:`remove_component`: least squares with an intercept, fitted on the
+split's training genes only, applied to all genes). Further activation stores of the same
+model (for example of a randomly re-initialized model) enter as representations of their
+own: the mean hidden state of every gene in that store.
 """
 from __future__ import annotations
 
 import warnings
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -31,8 +39,11 @@ from interpretfm.sae import Encoder
 from interpretfm.stores import iter_shards
 
 CONTROLS = ("random", "coexpression", "coexpression_pc50", "celltype", "trivial")
+SYMBOL_CONTROLS = ("names_tri", "names_pc50")
 SCALINGS = ("standardize", "center")
+MODEL_REPRESENTATIONS = ("hidden", "sae", "untrained")
 SAE_FAMILIES = {"sae", "untrained"}
+SYMBOL_REMOVED = "symbol_removed"
 
 
 @dataclass
@@ -54,6 +65,11 @@ class ReadoutParams:
     dedup_cells: bool = True
     max_shards: Optional[int] = None
     device: str = "auto"
+    representations: Sequence[str] = MODEL_REPRESENTATIONS
+    universe: Optional[str] = None
+    first_split: Optional[str] = None
+    stores: Dict[str, str] = field(default_factory=dict)
+    symbol_residuals: Sequence[str] = ()
 
     def resolved_device(self) -> torch.device:
         if self.device == "auto":
@@ -62,6 +78,59 @@ class ReadoutParams:
 
 
 # --- representations ----------------------------------------------------------------------------
+
+
+def symbol_trigrams(symbol: str) -> set:
+    """Character trigrams of a gene symbol, upper case, padded with ``^`` and ``$`` (``KRT5``:
+    ``^KR``, ``KRT``, ``RT5``, ``T5$``)."""
+    s = "^" + str(symbol).upper() + "$"
+    return {s[i:i + 3] for i in range(len(s) - 2)}
+
+
+def symbol_representations(symbols: Sequence[str], n_pcs: int = 50) -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """``(names_tri, names_pc50, trigrams)``: the binary gene x trigram matrix over the trigrams
+    that occur in ``symbols`` (sorted), and the first ``n_pcs`` principal components of the
+    column-centred matrix (scores ``U * S``)."""
+    grams = sorted(set().union(*[symbol_trigrams(s) for s in symbols])) if len(symbols) else []
+    index = {g: i for i, g in enumerate(grams)}
+    M = np.zeros((len(symbols), len(grams)), np.float32)
+    for r, s in enumerate(symbols):
+        for g in symbol_trigrams(s):
+            M[r, index[g]] = 1
+    C = M - M.mean(0, keepdims=True)
+    U, S, _ = np.linalg.svd(C.astype(np.float64), full_matrices=False)
+    k = min(int(n_pcs), len(S))
+    return M, (U[:, :k] * S[:k]).astype(np.float32), grams
+
+
+def remove_component(X: np.ndarray, P: np.ndarray, rows: np.ndarray) -> np.ndarray:
+    """``X`` minus its least-squares prediction from ``[1, P]``, the coefficients fitted on
+    ``rows`` only (the training genes of a split) and applied to every row."""
+    A = np.hstack([np.ones((len(P), 1)), P.astype(np.float64)])
+    B, *_ = np.linalg.lstsq(A[rows], X[rows].astype(np.float64), rcond=None)
+    return (X - A @ B).astype(np.float32)
+
+
+def read_gene_list(path: Union[str, Path]) -> List[str]:
+    """Gene keys from a text file, one per line (``#`` starts a comment line)."""
+    lines = [ln.strip() for ln in Path(path).read_text().splitlines()]
+    genes = [ln for ln in lines if ln and not ln.startswith("#")]
+    if not genes:
+        raise ValueError(f"stages.gene_readout.universe: {path} lists no genes")
+    return genes
+
+
+def read_split_file(path: Union[str, Path]) -> Tuple[List[str], List[str]]:
+    """``(train + validation genes, test genes)`` of a whole-gene held-out split written by a
+    concept evaluation (JSON with ``train_genes``, ``valid_genes`` and ``test_genes``)."""
+    import json
+
+    with open(path) as fh:
+        d = json.load(fh)
+    missing = [k for k in ("train_genes", "valid_genes", "test_genes") if k not in d]
+    if missing:
+        raise ValueError(f"stages.gene_readout.split.first_from: {path} has no {missing}")
+    return [str(g) for g in d["train_genes"]] + [str(g) for g in d["valid_genes"]], [str(g) for g in d["test_genes"]]
 
 
 def gene_means(store_root: Union[str, Path], layer: str, resolver: TokenResolver, keys: Sequence[str],
@@ -217,20 +286,31 @@ def probe_auroc(Xtv: np.ndarray, Xte: np.ndarray, Ytv: np.ndarray, Yte: np.ndarr
     return out
 
 
-def make_splits(universe: Sequence[str], n_splits: int, valid_frac: float, test_frac: float, seed: int
-                ) -> Dict[str, Tuple[List[str], List[str]]]:
-    """``{split name: (train+validation genes, test genes)}`` with the whole-gene split rule."""
+def make_splits(universe: Sequence[str], n_splits: int, valid_frac: float, test_frac: float, seed: int,
+                first: Optional[Tuple[Sequence[str], Sequence[str]]] = None) -> Dict[str, Tuple[List[str], List[str]]]:
+    """``{split name: (train+validation genes, test genes)}`` with the whole-gene split rule
+    (split ``s`` drawn with seed ``seed + s``). ``first`` (train+validation genes, test genes)
+    replaces split ``s0``, restricted to ``universe``."""
     out = {}
+    U = set(universe)
     for s in range(int(n_splits)):
+        if s == 0 and first is not None:
+            out["s0"] = (sorted(set(first[0]) & U), sorted(set(first[1]) & U))
+            if set(out["s0"][0]) & set(out["s0"][1]):
+                raise ValueError("stages.gene_readout.split.first_from: a gene is both a training and a test gene")
+            continue
         tr, va, te = _split_genes(list(universe), valid_frac, test_frac, seed + s)
         out[f"s{s}"] = (sorted(tr | va), sorted(te))
     return out
 
 
 def readout(reps: Dict[str, Tuple[np.ndarray, str]], Y: np.ndarray, term_ids: Sequence[str], sizes: Sequence[int],
-            gene_index: Dict[str, int], splits: Dict[str, Tuple[List[str], List[str]]], params: ReadoutParams, log=None):
+            gene_index: Dict[str, int], splits: Dict[str, Tuple[List[str], List[str]]], params: ReadoutParams, log=None,
+            residuals: Optional[Tuple[np.ndarray, Sequence[str]]] = None):
     """Score every representation (``name -> (matrix over the universe genes, family)``) on every
-    split; returns the per-concept ``DataFrame``."""
+    split; returns the per-concept ``DataFrame``. ``residuals = (P, names)`` also scores each
+    representation in ``names`` with the part predictable from ``P`` removed (fitted on the
+    split's training genes; :func:`remove_component`), as ``<name>|symbol_removed``."""
     import pandas as pd
 
     frames = []
@@ -244,7 +324,13 @@ def readout(reps: Dict[str, Tuple[np.ndarray, str]], Y: np.ndarray, term_ids: Se
         ytv, yte = ytv[:, keep], yte[:, keep]
         tk = np.asarray(term_ids, dtype=object)[keep]
         sz = np.asarray(sizes)[keep]
-        for rname, (M, fam) in reps.items():
+        todo = dict(reps)
+        if residuals is not None:
+            P, names = residuals
+            for name in names:
+                M, fam = reps[name]
+                todo[f"{name}|{SYMBOL_REMOVED}"] = (remove_component(M, P, itv), fam)
+        for rname, (M, fam) in todo.items():
             Xtv, Xte = M[itv], M[ite]
             d, sign, a_tv, a_te = single_dim_auroc(Xtv, Xte, ytv, yte, both_signs=fam not in SAE_FAMILIES)
             df = pd.DataFrame({"split": sname, "representation": rname, "family": fam, "concept": tk, "n_genes": sz,
@@ -288,11 +374,17 @@ def params_from_mapping(params: Dict[str, Any], default_seed: int = 0) -> Readou
     size = get_list(params, "concept_size", [5, 100], "gene_readout")
     if len(size) != 2:
         raise ValueError("stages.gene_readout.concept_size: expected [min, max]")
+    stores = get_mapping(params, "stores", "gene_readout")
+    reserved = set(MODEL_REPRESENTATIONS) | set(CONTROLS) | set(SYMBOL_CONTROLS)
+    for name, root in stores.items():
+        if name in reserved or "|" in str(name) or not isinstance(root, str):
+            raise ValueError(f"stages.gene_readout.stores.{name}: expected a store path under a name other than "
+                             f"{sorted(reserved)} (without '|')")
     p = ReadoutParams(
         n_splits=get_param(params, "n_splits", 5, "gene_readout", int),
         C=get_param(params, "C", 1.0, "gene_readout", float),
         scaling=get_list(params, "scaling", list(SCALINGS), "gene_readout", choices=SCALINGS),
-        controls=get_list(params, "controls", list(CONTROLS), "gene_readout", choices=CONTROLS),
+        controls=get_list(params, "controls", list(CONTROLS), "gene_readout", choices=CONTROLS + SYMBOL_CONTROLS),
         concept_size=(int(size[0]), int(size[1])),
         valid_frac=float(split.get("valid", 0.2)), test_frac=float(split.get("test", 0.1)),
         max_cells=get_param(params, "max_cells", 100_000, "gene_readout", int),
@@ -303,6 +395,13 @@ def params_from_mapping(params: Dict[str, Any], default_seed: int = 0) -> Readou
         dedup_cells=bool(params.get("dedup_cells", True)),
         max_shards=get_param(params, "max_shards", None, "gene_readout", int),
         device=get_param(params, "device", "auto", "gene_readout", str),
+        representations=get_list(params, "representations", list(MODEL_REPRESENTATIONS), "gene_readout",
+                                 choices=MODEL_REPRESENTATIONS),
+        universe=get_param(params, "universe", None, "gene_readout", str),
+        first_split=get_param(split, "first_from", None, "gene_readout.split", str),
+        stores={str(k): str(v) for k, v in stores.items()},
+        symbol_residuals=get_list(params, "symbol_residuals", [], "gene_readout",
+                                  choices=MODEL_REPRESENTATIONS + CONTROLS + SYMBOL_CONTROLS + tuple(stores)),
     )
     if p.n_splits <= 0 or p.C <= 0 or not p.scaling:
         raise ValueError("stages.gene_readout: n_splits and C must be > 0 and scaling non-empty")
@@ -312,4 +411,5 @@ def params_from_mapping(params: Dict[str, Any], default_seed: int = 0) -> Readou
 def params_dict(p: ReadoutParams) -> Dict[str, Any]:
     d = asdict(p)
     d["scaling"], d["controls"], d["concept_size"] = list(p.scaling), list(p.controls), list(p.concept_size)
+    d["representations"], d["symbol_residuals"] = list(p.representations), list(p.symbol_residuals)
     return d
