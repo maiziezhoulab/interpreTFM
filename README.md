@@ -8,10 +8,10 @@ Layer-resolved evaluation of transcriptomic foundation models with sparse autoen
 [![Python 3.8–3.11](https://img.shields.io/badge/python-3.8%E2%80%933.11-blue.svg)](pyproject.toml)
 
 <p align="center">
-  <img src="docs/_static/figure1.png" alt="Figure 1: the interpreTFM workflow and analyses" width="720">
+  <img src="docs/_static/figure1.png" alt="Figure 1: the interpreTFM workflow and main results" width="720">
 </p>
 
-**Figure 1.** The interpreTFM workflow: expression profiles are tokenized for a frozen foundation model (a, b), layer activations are scored with the transcriptomic interpretability score (c) and decomposed by a sparse autoencoder (d), features are evaluated by held-out concept alignment and cell-level specificity (e) and projected to cells (f), and the resulting profiles support layer-wise comparison, niche discovery and interface analysis (g–i).
+**Figure 1.** The interpreTFM workflow: expression profiles are tokenized for a frozen foundation model (a, b), layer activations are scored with the transcriptomic interpretability score (c) and decomposed by a sparse autoencoder (d), features are evaluated by held-out concept alignment and cell-level specificity (e) and projected to cells (f). Panels g–l show the main results on the CosMx lung-cancer section (l, Xenium renal cell carcinoma): concept alignment on known versus unseen genes (g), a linear probe of concept membership for unseen genes against randomly re-initialized models and baselines (h), population specificity (i), niches that converge across models (j) and agree with cell types (k), and ligand–receptor co-localization in niche context (l).
 
 ## Overview
 

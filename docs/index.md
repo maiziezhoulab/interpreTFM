@@ -4,10 +4,10 @@ interpreTFM is a layer-resolved framework for evaluating what transcriptomic fou
 It extracts hidden states from frozen scGPT, Geneformer and C2S-Scale models, decomposes each evaluated layer with a sparse autoencoder (SAE), scores the features against baselines, and projects concept-associated features back to cells for analyses of single-cell and targeted spatial transcriptomic data.
 
 :::{figure} _static/figure1.png
-:alt: The interpreTFM workflow (panels a–f) and the downstream interpretability analyses (panels g–i).
+:alt: The interpreTFM workflow (panels a–f) and the main results (panels g–l).
 :width: 100%
 
-**Figure 1.** The interpreTFM workflow: expression profiles are tokenized for a frozen foundation model (a, b), layer activations are scored with the transcriptomic interpretability score (c) and decomposed by a sparse autoencoder (d), features are evaluated by held-out concept alignment and cell-level specificity (e) and projected to cells (f), and the resulting profiles support layer-wise comparison, niche discovery and interface analysis (g–i).
+**Figure 1.** The interpreTFM workflow: expression profiles are tokenized for a frozen foundation model (a, b), layer activations are scored with the transcriptomic interpretability score (c) and decomposed by a sparse autoencoder (d), features are evaluated by held-out concept alignment and cell-level specificity (e) and projected to cells (f). Panels g–l show the main results on the CosMx lung-cancer section (l, Xenium renal cell carcinoma): concept alignment on known versus unseen genes (g), a linear probe of concept membership for unseen genes against randomly re-initialized models and baselines (h), population specificity (i), niches that converge across models (j) and agree with cell types (k), and ligand–receptor co-localization in niche context (l).
 :::
 
 ## What interpreTFM measures
