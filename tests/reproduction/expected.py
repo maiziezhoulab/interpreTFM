@@ -54,7 +54,7 @@ KNOWN_DIFFERENCES = {
     "xenium_geneformer_layer2 T1 TIS gain": {
         "observed": 0.2009, "tol": 0.0005, "note": "printed 0.195 (Table S1); pipeline 0.201"},
     "xenium_c2s_layer14 T8 seed ARI": {
-        "observed": None, "note": "printed 0.996 (Table S4); pipeline 0.616"},
+        "observed": None, "note": "printed 0.996 (Table S5); pipeline 0.616"},
     "xenium_c2s_layer14 T10 (interfaces stage, pipeline niches) enriched (niche)": {
         "observed": None, "note": "printed 18 (Table S9); pipeline 15"},
     "xenium_c2s_layer14 T10 (interfaces stage, pipeline niches) depleted (niche)": {
@@ -62,9 +62,9 @@ KNOWN_DIFFERENCES = {
     "xenium_c2s_layer14 T10 (interfaces stage, pipeline niches) FPR i.i.d. noise (%)": {
         "observed": None, "note": "manuscript run 4.5 (not printed); pipeline 5.6"},
     "xenium_geneformer_layer2 T9 expression at the manuscript configuration NMI": {
-        "observed": None, "note": "printed 0.105 (Table S4); pipeline 0.126"},
+        "observed": None, "note": "printed 0.105 (Table S5); pipeline 0.126"},
     "xenium_c2s_layer14 T9 expression at the manuscript configuration ARI": {
-        "observed": None, "note": "printed 0.034 (Table S4); pipeline 0.046"},
+        "observed": None, "note": "printed 0.034 (Table S5); pipeline 0.046"},
     "xenium_geneformer_layer2 concepts marked at the row split (sparse, test F1 >= 0.5)": {
         "observed": None, "note": "manuscript run 572 (printed as the range 262-593); pipeline 540"},
 }

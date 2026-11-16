@@ -12,7 +12,7 @@ The configurations in `configs/paper/` hold, for each of the six representative 
 | `xenium_c2s_layer14.yaml` | Xenium RCC | C2S-Scale | `layer_13` (14) |
 
 :::{note}
-The reproduction data (datasets, activation stores of 24-46 GB per layer, SAE checkpoints and held-out tables) are not part of the repository; they are deposited with the release (see the data statement of the manuscript). The cached intermediates let the tests also check the pure summary rules (λ selection, concept-F1 summary) in seconds, without a pipeline run. The trained SAEs of the six layers are also published on the Hugging Face Hub (`interpretfm.hub.load_sae`), and the [tutorial](tutorials/cosmx_crop.md) runs the spatial stages from one of them on a crop of the CosMx section without any of the stores.
+What is where. The code and the configurations are in this repository. The trained SAEs of the six layers are on the Hugging Face Hub (`YunfeiHu/interpreTFM`; `interpretfm.hub.load_sae`). The data deposit (Zenodo, DOI to be added) holds the retained sparse-feature matrices per cell, the niche assignments, the Xenium annotations and the source tables (about 1 GB). The activation stores (about 650 GB) are not distributed: the `extract` stage regenerates them from the public datasets and model weights (see "Fresh extraction" below). The other cached intermediates named below (the SAE checkpoints of every λ, the held-out tables and the cached results that the tests compare with) are not distributed either; where they are available, the tests also apply the summary rules (λ selection, concept-F1 summary) to them in seconds, without a pipeline run. The [tutorial](tutorials/cosmx_crop.md) runs the spatial stages from a published SAE on a crop of the CosMx section without any store.
 :::
 
 What runs where: every stage of the paper configurations runs in the core environment on a CPU (the stores are cached), so no model environment or GPU is needed; only the fresh-extraction configurations below start the model environments. See [which environment do I need?](installation.md#which-environment-do-i-need).
@@ -132,9 +132,9 @@ Pipeline values from the test environment (Python 3.11, scikit-learn 1.9.1). The
 | Comparison | Manuscript | Manuscript value | Pipeline |
 |---|---|---|---|
 | Xenium Geneformer TIS gain | Table S1 | 0.195 | 0.201 |
-| Xenium C2S-Scale five niches (r100/xm/kmeans/k5), seed-to-seed ARI | Table S4 | 0.996 | 0.616 |
-| Xenium expression-only niches at the Geneformer configuration (r120/m/kmeans/k5), ARI / NMI | Table S4 | 0.052 / 0.105 | 0.059 / 0.126 |
-| Xenium expression-only niches at the C2S-Scale configuration (r100/xm/kmeans/k5), ARI / NMI | Table S4 | 0.034 / 0.095 | 0.046 / 0.098 |
+| Xenium C2S-Scale five niches (r100/xm/kmeans/k5), seed-to-seed ARI | Table S5 | 0.996 | 0.616 |
+| Xenium expression-only niches at the Geneformer configuration (r120/m/kmeans/k5), ARI / NMI | Table S5 | 0.052 / 0.105 | 0.059 / 0.126 |
+| Xenium expression-only niches at the C2S-Scale configuration (r100/xm/kmeans/k5), ARI / NMI | Table S5 | 0.034 / 0.095 | 0.046 / 0.098 |
 | Xenium C2S-Scale niche-stratified interface calls on the pipeline's niches, enriched / depleted | Table S9 | 18 / 24 | 15 / 22 |
 | Xenium C2S-Scale false-positive rate on i.i.d. noise, niche-stratified pairs (%) | manuscript run (not printed) | 4.5 | 5.6 |
 | Xenium Geneformer concepts marked at the row split (test F1 ≥ 0.5) | manuscript run (range 262–593 printed) | 572 | 540 |
