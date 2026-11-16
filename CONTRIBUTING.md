@@ -6,7 +6,7 @@ interpreTFM is research software. The 0.9 package is kept close to the code used
 
 ## Reporting a problem
 
-Open a [GitHub issue](https://github.com/OliiverHu/interpreTFM/issues) and include:
+Open a [GitHub issue](https://github.com/maiziezhoulab/interpreTFM/issues) and include:
 
 - what you ran (command or code), what you expected and what happened, with the full error message;
 - the interpreTFM version (`python -c "import interp_pipeline; print(interp_pipeline.__version__)"`), Python version, operating system, and the environment file you used;
@@ -17,7 +17,7 @@ Security problems: see [SECURITY.md](SECURITY.md).
 ## Development setup
 
 ```bash
-git clone https://github.com/OliiverHu/interpreTFM.git
+git clone https://github.com/maiziezhoulab/interpreTFM.git
 cd interpreTFM
 conda env create -f envs/interpretfm.yml      # or any environment with PyTorch installed
 conda activate interpretfm

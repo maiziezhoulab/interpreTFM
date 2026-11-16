@@ -8,7 +8,7 @@ A manuscript describing interpreTFM is in preparation. Until it is published, pl
   title   = {{interpreTFM}: layer-resolved evaluation of transcriptomic foundation models},
   version = {0.9.0},
   year    = {2026},
-  url     = {https://github.com/OliiverHu/interpreTFM},
+  url     = {https://github.com/maiziezhoulab/interpreTFM},
   note    = {Manuscript in preparation}
 }
 ```

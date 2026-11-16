@@ -3,7 +3,7 @@
 Layer-resolved evaluation of transcriptomic foundation models with sparse autoencoders.
 
 [![Documentation](https://readthedocs.org/projects/interpretfm/badge/?version=latest)](https://interpretfm.readthedocs.io/en/latest/)
-[![CI](https://github.com/OliiverHu/interpreTFM/actions/workflows/ci.yml/badge.svg)](https://github.com/OliiverHu/interpreTFM/actions/workflows/ci.yml)
+[![CI](https://github.com/maiziezhoulab/interpreTFM/actions/workflows/ci.yml/badge.svg)](https://github.com/maiziezhoulab/interpreTFM/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Python 3.8–3.11](https://img.shields.io/badge/python-3.8%E2%80%933.11-blue.svg)](pyproject.toml)
 
@@ -41,7 +41,7 @@ The three foundation models need conflicting software stacks, so each has its ow
 | `c2s` | C2S-Scale extraction | `envs/c2s.yml` |
 
 ```bash
-git clone https://github.com/OliiverHu/interpreTFM.git
+git clone https://github.com/maiziezhoulab/interpreTFM.git
 cd interpreTFM
 conda env create -f envs/interpretfm.yml
 conda activate interpretfm
@@ -158,7 +158,7 @@ The manuscript describing interpreTFM is not yet published. Until it is, please 
   title   = {{interpreTFM}: layer-resolved evaluation of transcriptomic foundation models},
   version = {1.0.0},
   year    = {2026},
-  url     = {https://github.com/OliiverHu/interpreTFM}
+  url     = {https://github.com/maiziezhoulab/interpreTFM}
 }
 ```
 
@@ -168,7 +168,7 @@ interpreTFM is released under the GNU General Public License v3.0 or later ([`LI
 
 ## Contact
 
-Please use [GitHub issues](https://github.com/OliiverHu/interpreTFM/issues) for questions and bug reports, and see [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions.
+Please use [GitHub issues](https://github.com/maiziezhoulab/interpreTFM/issues) for questions and bug reports, and see [`CONTRIBUTING.md`](CONTRIBUTING.md) for contributions.
 
 ## Acknowledgements
 

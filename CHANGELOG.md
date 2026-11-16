@@ -62,5 +62,5 @@ First public pre-release of the analysis package.
 - CPU tests that need no data: imports, command-line help, the quick-start examples on toy data, and held-out F1 regressions.
 - Continuous integration (tests and documentation build), pre-commit configuration, contribution guide, code of conduct, security policy, citation file and third-party notices.
 
-[1.0.0]: https://github.com/OliiverHu/interpreTFM/compare/v0.9.0...v1.0.0
-[0.9.0]: https://github.com/OliiverHu/interpreTFM/releases/tag/v0.9.0
+[1.0.0]: https://github.com/maiziezhoulab/interpreTFM/compare/v0.9.0...v1.0.0
+[0.9.0]: https://github.com/maiziezhoulab/interpreTFM/releases/tag/v0.9.0

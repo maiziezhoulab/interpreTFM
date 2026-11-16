@@ -40,7 +40,7 @@ scGPT, Geneformer and C2S-Scale depend on conflicting library versions, so each 
 | `c2s` | C2S-Scale extraction | `envs/c2s.yml` |
 
 ```bash
-git clone https://github.com/OliiverHu/interpreTFM.git
+git clone https://github.com/maiziezhoulab/interpreTFM.git
 cd interpreTFM
 conda env create -f envs/interpretfm.yml
 conda activate interpretfm

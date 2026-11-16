@@ -50,4 +50,4 @@ They are not part of the repository. The trained SAEs of the six representative 
 
 ## How do I report a problem or ask a question?
 
-Open a [GitHub issue](https://github.com/OliiverHu/interpreTFM/issues). Security problems: see `SECURITY.md` in the repository.
+Open a [GitHub issue](https://github.com/maiziezhoulab/interpreTFM/issues). Security problems: see `SECURITY.md` in the repository.

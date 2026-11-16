@@ -17,7 +17,7 @@ import importlib.util, subprocess, sys
 ON_COLAB = importlib.util.find_spec("google.colab") is not None
 if ON_COLAB:  # a plain CPU install: PyTorch from the CPU index, then the package with the hub extra
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "torch", "--index-url", "https://download.pytorch.org/whl/cpu"], check=True)
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "interpretfm[hub] @ git+https://github.com/OliiverHu/interpreTFM.git"], check=True)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "interpretfm[hub] @ git+https://github.com/maiziezhoulab/interpreTFM.git"], check=True)
 ```
 
 ## 1. The data, the bundle and the SAE

@@ -10,7 +10,7 @@ authors:
 version: 1.0.0
 date-released: "RELEASE_DATE"
 license: GPL-3.0-or-later
-repository-code: "https://github.com/OliiverHu/interpreTFM"
+repository-code: "https://github.com/maiziezhoulab/interpreTFM"
 url: "https://interpretfm.readthedocs.io"
 abstract: >-
   interpreTFM is a layer-resolved framework for evaluating what transcriptomic

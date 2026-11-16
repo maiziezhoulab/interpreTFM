@@ -376,7 +376,7 @@ def model_card(info: Dict[str, Any], config: Dict[str, Any]) -> str:
     lines += [
         "## Citation", "",
         "Cite the interpreTFM manuscript (in preparation) and the software release (`CITATION.cff` of the repository, "
-        "<https://github.com/OliiverHu/interpreTFM>).", "",
+        "<https://github.com/maiziezhoulab/interpreTFM>).", "",
         "## Loading", "", "```python", "from interpretfm.hub import load_sae", "from interpretfm.sae import Encoder", "",
         f'ckpt = load_sae("{config.get("repo_id", DEFAULT_REPO)}", model="{info["model"]}", layer="{info["layer"]}", '
         f'dataset="{ds["key"]}")  # or a local export folder',
