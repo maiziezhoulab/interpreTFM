@@ -1,0 +1,88 @@
+# Post hoc controls of the gene-level readout (Methods; Supplementary Table S3, rows marked post hoc):
+# Xenium RCC section, Geneformer, stored layer `layer_1` (display "Layer 2"). The configuration of xenium_geneformer_layer2.yaml
+# (dataset, model, cached store and SAE) with a gene_readout stage that scores, on the genes observed by all three
+# models (xenium_readout_genes.txt) and on the manuscript's five whole-gene splits (s0: the C2S-Scale whole-gene split
+# of the concept evaluation restricted to these genes; s1-s4: the split rule with seeds 1-4), with standardized
+# inputs and C = 1:
+# the gene-symbol controls (each symbol's binary character-trigram profile and its first 50 principal components)
+# and the mean hidden state and the co-expression control (50 PCs) with the part linearly predictable from those
+# 50 components removed (least squares with an intercept, fitted on each split's training genes).
+#   interpretfm run configs/paper/readout_controls_xenium_geneformer_layer2.yaml --env-file configs/paper/paths.env --stages ingest,extract,sae,concepts,gene_readout
+
+run:
+  name: readout_controls_xenium_geneformer_layer2
+  out_dir: ${INTERPRETFM_RUNS}/readout_controls_xenium_geneformer_layer2
+  seed: 0
+
+dataset:
+  h5ad: ${INTERPRETFM_DATA}/xenium_rcc_union_filtered_nonzero.h5ad   # 465,220 cells x 399 model-compatible genes, X = raw counts
+  counts_layer: null
+  gene_id: {column: index, kind: symbol}                 # var_names are gene symbols; Ensembl ids in var["gene_ids"]
+  labels: {column: cell_type}
+  spatial: {obsm: spatial, um_per_unit: 1.0}             # Xenium coordinates are already in um
+  qc: {min_transcripts: 0, min_genes: 0}                  # no cell filtering in the manuscript
+
+model:
+  name: geneformer
+  checkpoint: null                                              # weights are not needed: the store is cached
+  env: {}                                                 # not used: the activation store is cached
+  layers: [layer_1]
+  cell_pooling: {kind: token, token: "<cls>"}             # Geneformer <cls> token
+  special_tokens: ["<cls>", "<eos>"]                      # stored token ids are Ensembl ids, so no vocabulary is needed
+  representative_layer: layer_1
+
+stages:
+  extract: {store_root: "${INTERPRETFM_STORES}/acts_extraction_geneformer_xenium"}
+
+  sae:
+    width_multiplier: 8
+    lambda: {grid: [1.0], rule: {l0_max: 0.02, dead_max: 0.25}}
+    steps: 8000
+    lr: 1.0e-4
+    warmup: 1000
+    resample_every: 2000
+    batch_size: 1024
+    seed: 0
+    device: cpu
+    exclude_special_tokens: false
+    untrained_baseline: true
+    qc: {max_shards: 300, rows_per_shard: 512}
+    checkpoints:
+      layer_1:
+        "1.0": ${INTERPRETFM_PAPER_CACHE}/sae_v2/xenium/geneformer/layer_1/sae/v2biased__steps_8000__lam_1/sae_layer_1_best.pt
+
+  concepts:
+    sources: [GO:BP, GO:MF, GO:CC, REAC, KEGG]
+    fdr: 0.05
+    min_overlap: 2
+    organism: hsapiens
+    query_key: symbol
+    gene_keys: {ensembl_column: gene_ids}
+    offline_matrix: ${INTERPRETFM_PAPER_CACHE}/xenium_geneformer_c2sscale_strict_from_extract_to_immune/01_f1_heldout/gprofiler/gprofiler_binary_gene_by_term.csv
+    offline_terms: ${INTERPRETFM_PAPER_CACHE}/xenium_geneformer_c2sscale_strict_from_extract_to_immune/01_f1_heldout/gprofiler/gprofiler_terms.tsv
+
+  gene_readout:
+    n_splits: 5
+    C: 1.0
+    scaling: [standardize]
+    representations: [hidden]
+    controls: [coexpression_pc50, names_tri, names_pc50]
+    symbol_residuals: [hidden, coexpression_pc50]
+    universe: xenium_readout_genes.txt
+    concept_size: [5, 100]
+    split:
+      valid: 0.2
+      test: 0.1
+      first_from: ${INTERPRETFM_PAPER_CACHE}/sae_v2/xenium/c2sscale/layer_13/f1_heldout/heldout_raw__gene_identity/heldout_gene_split.json
+    max_cells: 100000
+    min_type_cells: 50
+    n_pcs: 50
+    seed: 0
+    max_iter: 3000
+    dedup_cells: true
+    device: cpu
+
+output:
+  html: false
+  json: true
+  keep_store: true
