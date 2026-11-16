@@ -46,7 +46,7 @@ These are needed only for the model adapters and extraction. Install them with `
 
 ## Where are trained SAEs and processed data?
 
-They are not part of the repository. Trained SAEs and feature–concept tables are planned for a Hugging Face release with v1.0, and processed analysis objects are planned to be archived with the publication.
+They are not part of the repository. The trained SAEs of the six representative layers, with their feature–concept tables, are on the Hugging Face Hub (`YunfeiHu/interpreTFM`; `interpretfm.hub.load_sae`). The processed data (the retained sparse-feature matrices per cell, the niche assignments, the Xenium annotations and the source tables) are in the data deposit, [doi:10.5281/zenodo.24293514](https://doi.org/10.5281/zenodo.24293514). The activation stores are not distributed; the `extract` stage regenerates them ([reproducing the manuscript](reproducing.md)).
 
 ## How do I report a problem or ask a question?
 
