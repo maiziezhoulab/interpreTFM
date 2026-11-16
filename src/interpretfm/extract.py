@@ -1,7 +1,8 @@
 """Extraction helpers shared by the ``extract`` stage and its checks (no model code here).
 
 - :func:`spec_from_config` turns ``model`` + ``stages.extract`` into the adapter's
-  :class:`~interpretfm.models.base.ExtractionSpec`;
+  :class:`~interpretfm.models.base.ExtractionSpec` (re-initialized weights,
+  ``stages.extract.weights``, only for the models of :mod:`interpretfm.models.reinit`);
 - :func:`select_cells` picks a seeded random subset or the cells listed in a file
   (``stages.extract.cell_subset``);
 - :func:`layer_manifest` summarises what was written for one layer (rows, cells, tokens, dtype)
@@ -34,6 +35,10 @@ def spec_from_config(cfg) -> ExtractionSpec:
     device = get_param(p, "device", DEFAULTS["device"], "extract", str)
     if not (device == "cpu" or device.startswith("cuda")):
         raise ValueError(f"stages.extract.device: expected 'cuda', 'cuda:<n>' or 'cpu', got {device!r}")
+    from interpretfm.models.reinit import WEIGHTS, check_weights
+
+    weights = get_param(p, "weights", "trained", "extract", str, choices=WEIGHTS)
+    check_weights(name, weights)
     return ExtractionSpec(
         model=name, layers=list(cfg.model.layers), checkpoint=cfg.model.checkpoint, device=device,
         batch_size=get_param(p, "batch_size", DEFAULTS["batch_size"], "extract", int),
@@ -41,14 +46,23 @@ def spec_from_config(cfg) -> ExtractionSpec:
         dtype=get_param(p, "dtype", DEFAULTS["dtype"], "extract", str, choices=("float32", "float16")),
         rows_per_shard=get_param(p, "rows_per_shard", DEFAULTS["rows_per_shard"], "extract", int),
         pooling_kind=cfg.model.cell_pooling.kind, pooling_token=cfg.model.cell_pooling.token,
-        special_tokens=[str(t) for t in cfg.model.special_tokens], seed=int(cfg.run.seed), options=options,
+        special_tokens=[str(t) for t in cfg.model.special_tokens], seed=int(cfg.run.seed),
+        weights=weights, weights_seed=get_param(p, "weights_seed", 0, "extract", int), options=options,
     )
 
 
 def read_cell_list(path: Union[str, Path]) -> List[str]:
-    """Cell ids from a text file (one per line, ``#`` comments) or a CSV with a ``cell`` column."""
+    """Cell ids from a text file (one per line, ``#`` comments) or a CSV with a ``cell`` column;
+    either may be gzip-compressed (``.gz``)."""
     path = Path(path)
-    text = path.read_text()
+    if path.suffix.lower() == ".gz":
+        import gzip
+
+        with gzip.open(path, "rt") as fh:
+            text = fh.read()
+        path = path.with_suffix("")
+    else:
+        text = path.read_text()
     lines = [ln.strip() for ln in text.splitlines()]
     lines = [ln for ln in lines if ln and not ln.startswith("#")]
     if not lines:

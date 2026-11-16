@@ -39,6 +39,8 @@ class ExtractionSpec:
     pooling_token: Optional[str] = None  #: ``model.cell_pooling.token``
     special_tokens: List[str] = field(default_factory=list)
     seed: int = 0
+    weights: str = "trained"  #: ``trained``, ``random_table`` or ``random_all`` (:mod:`interpretfm.models.reinit`)
+    weights_seed: int = 0  #: seed of the re-initialization
     options: Dict[str, Any] = field(default_factory=dict)  #: ``stages.extract.<model>``: model-specific keys
 
     def to_dict(self) -> Dict[str, Any]:
@@ -74,6 +76,9 @@ class ModelExtractor(ABC):
             raise ExtractionError(f"stages.extract.dtype: expected one of {list(DTYPES)}, got {spec.dtype!r}")
         if spec.batch_size <= 0 or spec.rows_per_shard <= 0:
             raise ExtractionError("stages.extract.batch_size and rows_per_shard must be > 0")
+        from interpretfm.models.reinit import check_weights
+
+        check_weights(self.name, spec.weights)
         return {"model": self.name, "n_genes": len(genes.keys)}
 
     def prepare(self, adata, spec: ExtractionSpec, log) -> None:

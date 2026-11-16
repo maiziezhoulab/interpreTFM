@@ -8,7 +8,9 @@ does not know are left out (reported in the manifest). A prepared copy of the da
 tokenized Arrow dataset are written under the stage's ``work`` directory. The stored rows of
 ``layer_<i>`` are the outputs of transformer block ``i`` (``hidden_states[i + 1]``) for every
 token of a cell, including ``<cls>`` and ``<eos>``; one store shard holds ``cells_per_shard``
-consecutive cells. The model runs in evaluation mode under ``torch.no_grad`` in float32.
+consecutive cells. The model runs in evaluation mode under ``torch.no_grad`` in float32. With
+``stages.extract.weights`` other than ``trained`` the loaded model is re-initialized on the
+extraction device before the forward passes (:func:`interpretfm.models.reinit.reinitialize`).
 
 Options (``stages.extract.geneformer``): ``model_version`` (``V2``, or ``V1`` for the
 30M-cell models and their dictionaries), ``nproc`` (tokenizer processes, 1), ``cells_per_shard``
@@ -102,6 +104,7 @@ class GeneformerExtractor(ModelExtractor):
         import scipy.sparse as sp
 
         from interp_pipeline.extraction.geneformer_extraction import extract_geneformer_to_store, tokenize_geneformer_dataset
+        from interpretfm.models.reinit import reinitialize
 
         info = self.check(spec, genes)
         version = info["model_version"]
@@ -138,11 +141,22 @@ class GeneformerExtractor(ModelExtractor):
 
             if not torch.cuda.is_available():
                 raise ExtractionError("stages.extract.device: cuda requested but no GPU is visible to this process")
+        weights: Dict[str, Any] = {}
+
+        def after_load(handle) -> None:
+            weights.update(reinitialize(handle.model, "geneformer", spec.weights, spec.weights_seed))
+            handle.model.eval()
+            if spec.weights != "trained":
+                log.info("geneformer: weights %s (seed %d): %d of %d parameter tensors re-initialized", spec.weights,
+                         spec.weights_seed, weights["n_changed"], weights["n_params"])
+
         layers_done = extract_geneformer_to_store(model_dir=str(spec.checkpoint), tokenized_dataset_path=tokenized,
                                                   store_root=str(store_root), layers=list(spec.layers), model_version=version,
                                                   device=spec.device, forward_batch_size=spec.batch_size,
-                                                  save_dtype="fp16" if spec.dtype == "float16" else "fp32")
+                                                  save_dtype="fp16" if spec.dtype == "float16" else "fp32",
+                                                  after_load=after_load)
         info.update({"layers_written": list(layers_done), "n_cells_extracted": int(adata.n_obs), "n_genes_used": int(keep.sum()),
+                     "weights": weights,
                      "cells_per_shard": cells_per_shard, "tokenized_dataset": str(tokenized), "prepared_h5ad": str(prepared),
                      "tokenization": {"rank_value": "median-normalized expression, descending", "special_tokens": version == "V2",
                                       "padding_rows_stored": False},

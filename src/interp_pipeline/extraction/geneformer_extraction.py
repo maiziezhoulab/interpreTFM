@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import pickle
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import scanpy as sc
@@ -11,7 +11,7 @@ import scipy.sparse as sp
 import torch
 from datasets import load_from_disk
 
-from interp_pipeline.adapters.models.geneformer import GeneformerAdapter
+from interp_pipeline.adapters.models.geneformer import GeneformerAdapter, GeneformerHandle
 from interp_pipeline.io.activation_store import ActivationStore, ActivationStoreSpec
 
 
@@ -122,15 +122,19 @@ def extract_geneformer_to_store(
     token_dictionary_file: Optional[str] = None,
     shard_key: str = "shards",
     save_dtype: str = "fp16",
+    after_load: Optional[Callable[[GeneformerHandle], None]] = None,
 ) -> List[str]:
     """Run Geneformer over a tokenized dataset and write the hidden states of ``layers`` to an activation store.
 
     One store shard is written per value of the dataset's shard column, with one row per
-    gene token (``token_unit="gene"``, token ids decoded to gene identifiers). Returns the
-    layers that were written.
+    gene token (``token_unit="gene"``, token ids decoded to gene identifiers). ``after_load``
+    is called with the loaded model handle before the first forward pass (the model is on
+    its device). Returns the layers that were written.
     """
     adapter = GeneformerAdapter()
     handle = adapter.load(model_dir=model_dir, model_version=model_version, device=device)
+    if after_load is not None:
+        after_load(handle)
 
     available_layers = set(adapter.list_layers(handle))
     layers = [layer for layer in layers if layer in available_layers]

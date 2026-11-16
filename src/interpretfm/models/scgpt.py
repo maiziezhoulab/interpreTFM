@@ -5,7 +5,9 @@ token in front, at most ``max_length`` tokens per cell (panel order, truncated),
 The stored rows of a layer are the outputs of ``transformer_encoder.layers[i]`` (the post-norm
 ``norm2`` output, hence the layer names ``layer_<i>.norm2``) for the real tokens of every cell;
 padding positions are not stored. The model runs in evaluation mode under ``torch.no_grad``
-in float32; cells are processed in dataset order in batches of ``batch_size``.
+in float32; cells are processed in dataset order in batches of ``batch_size``. With
+``stages.extract.weights`` other than ``trained`` the loaded model is re-initialized on the
+extraction device before the forward passes (:func:`interpretfm.models.reinit.reinitialize`).
 """
 from __future__ import annotations
 
@@ -51,6 +53,7 @@ class ScGPTExtractor(ModelExtractor):
         from interp_pipeline.extraction.extractor import extract_activations
         from interp_pipeline.io.activation_store import ActivationStore, ActivationStoreSpec
         from interp_pipeline.types.dataset import StandardDataset
+        from interpretfm.models.reinit import reinitialize
 
         info = self.check(spec, genes)
         names = self.gene_names(genes)
@@ -71,6 +74,12 @@ class ScGPTExtractor(ModelExtractor):
         t0 = time.time()
         adapter = ScGPTAdapter(gene_names=gene_names)
         handle = adapter.load(ModelSpec(name="scgpt", checkpoint=str(spec.checkpoint), device=spec.device, options={}))
+        module = ScGPTAdapter.module(handle)
+        weights = reinitialize(module, "scgpt", spec.weights, spec.weights_seed)
+        module.eval()
+        if spec.weights != "trained":
+            log.info("scgpt: weights %s (seed %d): %d of %d parameter tensors re-initialized", spec.weights,
+                     spec.weights_seed, weights["n_changed"], weights["n_params"])
         n_layers = int(handle.model.config.nlayers)
         for layer in spec.layers:
             layer_index(layer, n_layers, model="scgpt")
@@ -83,7 +92,7 @@ class ScGPTExtractor(ModelExtractor):
         with torch.no_grad():
             _index, layers_done = extract_activations(StandardDataset(adata=sub, obs_key_map={}), handle, adapter,
                                                       list(spec.layers), store, extraction_cfg)
-        info.update({"layers_written": layers_done, "n_cells_extracted": int(sub.n_obs),
+        info.update({"layers_written": layers_done, "n_cells_extracted": int(sub.n_obs), "weights": weights,
                      "n_cells_without_counts": int((~nonempty).sum()), "n_genes_used": int(keep.sum()),
                      "tokenization": {"normalize": "log1p of raw counts", "include_zero_genes": False, "add_cls": True,
                                       "max_length": spec.max_length, "padding_rows_stored": False},

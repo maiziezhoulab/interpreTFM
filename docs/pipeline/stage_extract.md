@@ -8,7 +8,7 @@ Directory `02_extract/`. Input: `ingest`. Model environment (`model.env`) for a 
 |---|---|---|
 | what runs | nothing model-related: the existing store (the sharded 0.9 format, `<root>/activations/<layer>/shard_*/`) is checked for every configured layer and registered in `store.json` | the adapter of `model.name` loads `model.checkpoint`, tokenizes the dataset and writes `02_extract/store/activations/<layer>/shard_<i>/{activations.pt,index.pt,metadata.json}` |
 | where | the current interpreter | the environment of `model.env`, as a child process; in the current interpreter when `model.env` is `{}` |
-| used for | the paper configurations (`configs/paper/*_layer*.yaml`), reusing an earlier extraction | new data, new layers, the fresh-extraction checks (`configs/paper/extract_*.yaml`) |
+| used for | the paper configurations (`configs/paper/*.yaml` other than `extract_*`), reusing an earlier extraction | new data, new layers, the fresh-extraction checks (`configs/paper/extract_*.yaml`) |
 
 ## The boundary
 
@@ -49,6 +49,12 @@ C2S-Scale reads text. The adapter builds, for every cell, the cell2sentence *cel
 
 Shards: `shard_column` names an `obs` column that assigns every cell to a shard (`shard_<k>` or any label; the manuscript's stores used the dataset's random `shards` column, 60 shards), and cells keep their dataset order within a shard; without it, consecutive blocks of `cells_per_shard` cells (derived from `rows_per_shard` and the median number of detected genes). With `shard_column` and no subset, the batches are the manuscript's and the rows come out bit-identical; a subset changes the batch composition (the padded length), which moves a few float16 steps (below).
 
+## Randomly re-initialized weights
+
+`weights` extracts from a randomly re-initialized scGPT or Geneformer model instead of the trained one (`interpretfm.models.reinit`): `random_all` re-initializes every parameter, `random_table` every parameter except the trained gene/token-embedding table (scGPT `encoder.embedding.weight`, Geneformer `bert.embeddings.word_embeddings.weight`), which is copied back after the re-initialization. The generator is seeded with `weights_seed` (`torch.manual_seed`) right before the re-initialization, which uses each module's own initialization: for scGPT `reset_parameters()` (or `_reset_parameters()`) of every submodule in `modules()` order, then the model's `init_weights()`; for Geneformer `model.apply(model._init_weights)` of the Hugging Face BERT model. The model is re-initialized after it has been moved to the extraction device, so the draws come from that device's generator: the same seed gives different weights on a GPU and on the CPU. The manifest records the result under `adapter.weights` (the setting, the seed, the number of parameter tensors, how many changed and which did not). C2S-Scale has no re-initialization rule; `weights` other than `trained` is an error for it (`stages.extract.weights: 'random_all' is available for ['geneformer', 'scgpt'] only`). With a cached store (`store_root`), `weights` states what the store holds; the stage checks the value and records it in `store.json`.
+
+The configurations `configs/paper/reinit_cosmx_{scgpt,geneformer}_{trained,random_table,random_all}.yaml` describe the manuscript's runs (CosMx Layer 2, the GSI/MHR cell sample, seed 0, on a GPU); they start from the cached stores of those extractions, and without `store_root` they re-extract them.
+
 ## Cell-level pooling
 
 How a cell-level vector is read from the token rows is declared once, in `model.cell_pooling`: `{kind: token, token: "<id>"}` takes the row whose token id is `<id>` (scGPT's `<cls>` is vocabulary id `60695`, Geneformer's is `<cls>`), `{kind: mean}` averages a cell's rows outside `model.special_tokens`. Every later stage reads it from there (`interpretfm.stores.cell_matrix`); the extract stage records it in `store.json` and warns when a cell lacks the pooling token.
@@ -63,7 +69,9 @@ How a cell-level vector is read from the token rows is declared once, in `model.
 | `dtype` | `float32` | storage dtype of the rows: `float32` or `float16` (the manuscript's Geneformer and C2S-Scale stores) |
 | `rows_per_shard` | 200000 | approximate token rows per shard (Geneformer: whole cells, `cells_per_shard` derived from it) |
 | `device` | `cuda` | `cuda`, `cuda:<n>` or `cpu` |
-| `cell_subset` | – | a number of cells (a seeded draw with `run.seed`, kept in dataset order) or a file of cell ids (one per line, or a CSV with a `cell` column); the ids used go to `cell_subset.txt`. Later stages work on the subset (cells without rows are reported as such) |
+| `cell_subset` | – | a number of cells (a seeded draw with `run.seed`, kept in dataset order) or a file of cell ids (one per line, or a CSV with a `cell` column; either may be gzip-compressed, `.gz`; a relative path is relative to the configuration file); the ids used go to `cell_subset.txt`. Later stages work on the subset (cells without rows are reported as such) |
+| `weights` | `trained` | `trained`, `random_table` (every parameter re-initialized except the gene-embedding table) or `random_all` (every parameter re-initialized); scGPT and Geneformer only (see above) |
+| `weights_seed` | 0 | seed of the re-initialization |
 | `gene_keys` | the `concepts` stage's keys | `{symbol_column, ensembl_column}` of `var` for the model's vocabulary kind |
 | `scgpt` | `{}` | (no options) |
 | `geneformer` | `{model_version: V2, nproc: 1}` | tokenizer version (`V1` for the 30M-cell models and their dictionaries), tokenizer processes, `cells_per_shard` |
@@ -78,7 +86,7 @@ How a cell-level vector is read from the token rows is declared once, in `model.
 
 ```
 02_extract/
-  store.json                 root, format, layers, source (extracted | cached), model, n_shards, n_cells, cell_pooling, special_tokens, dtype, cell_subset
+  store.json                 root, format, layers, source (extracted | cached), model, n_shards, n_cells, cell_pooling, special_tokens, dtype, cell_subset (cached: weights)
   store/activations/<layer>/shard_<i>/{activations.pt, index.pt, metadata.json}
   <layer>/manifest.json      counts, adapter summary, check (coverage), extraction parameters, cell subset, environment (python, torch/CUDA, packages)
   cell_subset.txt            the cell ids extracted (subset runs)
@@ -86,4 +94,4 @@ How a cell-level vector is read from the token rows is declared once, in `model.
   log.txt                    the child's output
 ```
 
-Python: `interpretfm.extract` (`spec_from_config`, `select_cells`, `layer_manifest`, `compare_stores`, `compare_projections`), `interpretfm.models` (`get_extractor`, `ADAPTERS`), `interpretfm.envs` (`resolve_env`, `run_in_env`, `container_command`, `child_environment`).
+Python: `interpretfm.extract` (`spec_from_config`, `select_cells`, `layer_manifest`, `compare_stores`, `compare_projections`), `interpretfm.models` (`get_extractor`, `ADAPTERS`), `interpretfm.models.reinit` (`reinitialize`, `WEIGHTS`), `interpretfm.envs` (`resolve_env`, `run_in_env`, `container_command`, `child_environment`).

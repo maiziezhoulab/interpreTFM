@@ -500,6 +500,11 @@ def parse_config(raw: Dict[str, Any], base: Union[str, Path] = ".", source: Opti
             errors.append(f"stages.{name}: unknown stage; expected one of {PARAM_STAGES}")
             continue
         stages[name] = dict(_require_mapping(params, f"stages.{name}", errors))
+    subset = stages.get("extract", {}).get("cell_subset")
+    if isinstance(subset, str) and not Path(subset).expanduser().is_absolute():
+        # a cell list next to the configuration: resolved here, so that the model-environment child,
+        # which reads the resolved configuration from the run directory, finds the same file
+        stages["extract"]["cell_subset"] = str(_resolve(base, subset))
 
     if errors:
         raise ConfigError("invalid configuration:\n  - " + "\n  - ".join(errors))

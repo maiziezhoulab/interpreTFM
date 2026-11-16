@@ -23,7 +23,10 @@ error unless ``cpu`` is set), ``cell_subset`` (a number of cells drawn with ``ru
 file of cell ids; the ids used are written to ``cell_subset.txt``), ``gene_keys``
 (``{symbol_column, ensembl_column}`` of ``var``; default: the ``concepts`` stage's keys or
 common column names) and one mapping per model with model-specific options
-(``scgpt: {}``, ``geneformer: {model_version: V2, nproc: 1}``, ``toy: {hidden_dim: 16}``).
+(``scgpt: {}``, ``geneformer: {model_version: V2, nproc: 1}``, ``toy: {hidden_dim: 16}``),
+``weights`` (``trained``; ``random_table`` or ``random_all`` re-initialize scGPT or Geneformer
+before the extraction, :mod:`interpretfm.models.reinit`) and ``weights_seed`` (0). With a cached
+store, ``weights`` states what the store holds and is recorded in ``store.json``.
 
 Cell-level pooling is declared once, in ``model.cell_pooling`` (``token`` with the token id of
 the classification row, or ``mean`` over gene rows); the stage records it in ``store.json``
@@ -52,15 +55,20 @@ def run_extract(ctx: StageContext) -> Optional[Dict[str, Any]]:
     """Token-level activation extraction into the sharded store (fresh, in the model environment, or a cached store)."""
     store_root = ctx.params.get("store_root")
     if store_root:
+        from interpretfm.models.reinit import check_weights
+
+        weights = ctx.params.get("weights", "trained")
+        check_weights(ctx.config.model.name, weights)  # describes the cached store; checked as for a fresh extraction
         root = param_path(ctx.config, store_root, "extract", "store_root")
         n_shards = {}
         for layer in ctx.config.model.layers:
             if not layer_root(root, layer).is_dir():
                 raise FileNotFoundError(f"stages.extract.store_root: layer {layer!r} not found under {root}/activations")
             n_shards[layer] = len(list_shards(root, layer))
-        write_store_spec(ctx.stage_dir, root, ctx.config.model.layers, {"source": "cached", "n_shards": n_shards})
-        ctx.log.info("extract: using the cached activation store %s (%s)", root, n_shards)
-        return {"source": "cached", "store_root": str(root), "n_shards": n_shards}
+        write_store_spec(ctx.stage_dir, root, ctx.config.model.layers, {"source": "cached", "n_shards": n_shards,
+                                                                        "weights": weights})
+        ctx.log.info("extract: using the cached activation store %s (%s, weights %s)", root, n_shards, weights)
+        return {"source": "cached", "store_root": str(root), "n_shards": n_shards, "weights": weights}
     return extract_fresh(ctx)
 
 
