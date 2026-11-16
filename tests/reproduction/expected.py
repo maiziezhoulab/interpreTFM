@@ -1,5 +1,6 @@
-"""Published numbers of the six representative layers (Supplementary Tables S1 and S3) and where
-their cached sources live under ``${INTERPRETFM_PAPER_CACHE}``.
+"""Published numbers of the six representative layers (Supplementary Tables S1 and S3), of the post hoc
+controls (randomly re-initialized models, gene-symbol readout) and where their cached sources live under
+``${INTERPRETFM_PAPER_CACHE}``.
 
 Stored layer ids are zero-based (``layer_1.norm2`` is display Layer 2). Cached-source values are
 read from the cache at test time (``cached_*`` helpers in the test modules), so that the
@@ -67,6 +68,8 @@ KNOWN_DIFFERENCES = {
         "observed": None, "note": "printed 0.034 (Table S5); pipeline 0.046"},
     "xenium_geneformer_layer2 concepts marked at the row split (sparse, test F1 >= 0.5)": {
         "observed": None, "note": "manuscript run 572 (printed as the range 262-593); pipeline 540"},
+    "xenium_scgpt_layer3 raw hidden state, symbol component removed probe AUROC (standardized)": {
+        "observed": 0.5951, "tol": 0.0005, "note": "printed 0.594 (Table S3); pipeline 0.595"},
 }
 
 EXPECTED = {e["name"]: e for e in [
@@ -205,3 +208,38 @@ LR_SCREEN_XENIUM = {
 #: Xenium reference inputs of the interface test (marker labels: exact label = group, no group map).
 XENIUM_INTERFACE_MODELS = {"scgpt": ("layer_2.norm2", "r100p0_xm_gmm_k5"), "geneformer": ("layer_1", "r120p0_m_kmeans_k5"),
                            "c2sscale": ("layer_13", "r100p0_xm_kmeans_k5")}
+
+# Randomly re-initialized models (Methods; Results; Supplementary Table S1, note): CosMx Layer 2, the GSI/MHR cell
+# sample of each model, sparse SAE with the λ rule. Per form: the λ the rule chose (Methods), concept F1 on the row
+# and the whole-gene split, and the concepts with a test F1 of at least 0.5 (row split).
+REINIT = {
+    "scgpt": {"layer": "layer_1.norm2", "n_cells": 30356,
+              "trained": {"lambda": 1.0, "f1_row": 0.333, "f1_gene": 0.023, "marked": 275},
+              "random_table": {"lambda": 3.0, "f1_row": 0.366, "f1_gene": 0.013, "marked": 643},
+              "random_all": {"lambda": 3.0, "f1_row": 0.330, "f1_gene": 0.008, "marked": 350}},
+    "geneformer": {"layer": "layer_1", "n_cells": 40480,
+                   "trained": {"lambda": 1.0, "f1_row": 0.355, "f1_gene": 0.017, "marked": 559},
+                   "random_table": {"lambda": 1.0, "f1_row": 0.349, "f1_gene": 0.004, "marked": 638},
+                   "random_all": {"lambda": 1.0, "f1_row": 0.341, "f1_gene": 0.001, "marked": 636}},
+}
+
+# Post hoc controls of the gene-level readout (Supplementary Table S3, rows marked post hoc; standardized probe,
+# mean +- SD over the five whole-gene splits). Per representative layer: the raw hidden state with its symbol
+# component removed, and (CosMx scGPT and Geneformer) the randomly re-initialized models.
+READOUT_CONTROLS = {
+    "cosmx_scgpt_layer2": {"symbol_removed": (0.616, 0.027), "random_table": (0.668, 0.020), "random_all": (0.500, 0.013)},
+    "cosmx_geneformer_layer2": {"symbol_removed": (0.616, 0.013), "random_table": (0.660, 0.009), "random_all": (0.518, 0.015)},
+    "cosmx_c2s_layer14": {"symbol_removed": (0.657, 0.012)},
+    "xenium_scgpt_layer3": {"symbol_removed": (0.594, 0.025)},
+    "xenium_geneformer_layer2": {"symbol_removed": (0.583, 0.029)},
+    "xenium_c2s_layer14": {"symbol_removed": (0.606, 0.039)},
+}
+# Per dataset: the gene-symbol controls and co-expression (50 PCs) with its symbol component removed.
+SYMBOL_CONTROLS = {
+    "cosmx": {"names_tri": (0.684, 0.014), "names_pc50": (0.676, 0.008), "coexpression_pc50_symbol_removed": (0.574, 0.018)},
+    "xenium": {"names_tri": (0.639, 0.042), "names_pc50": (0.587, 0.038), "coexpression_pc50_symbol_removed": (0.557, 0.010)},
+}
+# Results: removing the symbol component lowered every model's readout by 0.06-0.09, C2S-Scale's in CosMx by 0.088
+# against 0.062-0.065 for scGPT and Geneformer.
+SYMBOL_DROP = {"range": (0.06, 0.09), "cosmx": {"cosmx_c2s_layer14": 0.088, "cosmx_scgpt_layer2": 0.062,
+                                                "cosmx_geneformer_layer2": 0.065}}
