@@ -3,7 +3,7 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - RELEASE_DATE
+## [1.0.0] - 2026-11-17
 
 First release of the v1 pipeline: one command runs every stage of the manuscript's analysis from one configuration file, the manuscript's layers are reproduced by configurations and tests, trained SAEs are exported for the Hugging Face Hub, and a CPU tutorial runs the spatial stages from a published SAE.
 
