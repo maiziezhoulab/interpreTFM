@@ -2,6 +2,7 @@
 
 Layer-resolved evaluation of transcriptomic foundation models with sparse autoencoders.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24298819.svg)](https://doi.org/10.5281/zenodo.24298819)
 [![Documentation](https://readthedocs.org/projects/interpretfm/badge/?version=latest)](https://interpretfm.readthedocs.io/en/latest/)
 [![CI](https://github.com/maiziezhoulab/interpreTFM/actions/workflows/ci.yml/badge.svg)](https://github.com/maiziezhoulab/interpreTFM/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue.svg)](LICENSE)
@@ -158,6 +159,7 @@ The manuscript describing interpreTFM is not yet published. Until it is, please 
   title   = {{interpreTFM}: layer-resolved evaluation of transcriptomic foundation models},
   version = {1.0.0},
   year    = {2026},
+  doi     = {10.5281/zenodo.24298819},
   url     = {https://github.com/maiziezhoulab/interpreTFM}
 }
 ```
